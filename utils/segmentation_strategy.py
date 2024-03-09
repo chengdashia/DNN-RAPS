@@ -9,7 +9,7 @@ from config import CLIENTS_NUMBERS
 # The idea is to avoid splitting at critical layers (like the first and last layers) and
 # balance the computational load across segments.
 # and contains the network's layer configurations
-def select_segmentation_points(model_cfg):
+def random_select_segmentation_points(model_cfg):
     """
     Automatically selects segmentation points for the network.
     :param model_cfg: Configuration of the network models

@@ -12,64 +12,26 @@ import torch.nn as nn
 import socket
 import time
 from models.model_struct import model_cfg
-from config import CLIENTS_CONFIG, CLIENTS_LIST
-from utils.segmentation_strategy import select_segmentation_points
+from config import CLIENTS_LIST
+from utils.segmentation_strategy import random_select_segmentation_points
+from utils.dnn_partition import segment_network
+from utils.utils import segmented_index
 
 
 # Segment the network
-segmentation_points = select_segmentation_points(model_cfg)
+segmentation_points = random_select_segmentation_points(model_cfg)
 print('*'*40)
 print(segmentation_points)
 
 # Now, segment the network based on the selected points
-def segment_network(model_cfg, segmentation_points):
-    segments = []
-    start = 0
-    for point in segmentation_points:
-        segments.append(model_cfg['VGG5'][start:point])
-        start = point
-    segments.append(model_cfg['VGG5'][start:])  # Add the last segment
-    return segments
-
 segmented_models = segment_network(model_cfg, segmentation_points)
-
-# Print the layer configurations for each segment and the segmentation points
-for i, segment in enumerate(segmented_models):
-    print(f"Segment {i+1}:")
-    for layer_cfg in segment:
-        print(layer_cfg)
-    print("\n")  # New line for better readability between segments
+print("segmented_models", segmented_models)
 
 # segments now contains the segmented layers of the network
 # 在每个节点上计算的第k层
 # split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
 # reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
-first_a = []
-second_b = []
-third_c = []
-for i in range(0,segmentation_points[0]):
-    first_a.append(i)
-for i in range(segmentation_points[0], segmentation_points[1]):
-    second_b.append(i)
-for i in range(segmentation_points[1], len(model_cfg['VGG5'])):
-    third_c.append(i)
-
-print(first_a,second_b,third_c)
-split_layer = {0: first_a, 1: second_b, 2: third_c}
-print(split_layer)
-
-reverse_split_layer={}
-for i in range(0,len(first_a)):
-    reverse_split_layer[i]=0
-x = len(first_a)
-for i in range(len(first_a)):
-    reverse_split_layer[x+i]=1
-y = len(first_a)+len(second_b)
-for i in range(len(third_c)):
-    reverse_split_layer[y+i]=2
-print(reverse_split_layer)
-
-
+split_layer, reverse_split_layer = segmented_index(segmented_models)
 
 host_port = 9001
 host_node_num = 0

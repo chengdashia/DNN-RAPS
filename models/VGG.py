@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-# Build the VGG model according to location and split_layer
+# Build the VGG models according to location and split_layer
 class VGG(nn.Module):
 	def __init__(self, location, vgg_name, split_layer, cfg):
 		super(VGG, self).__init__()
@@ -31,7 +31,7 @@ class VGG(nn.Module):
 		if self.location == 'Client':
 			cfg = cfg[:self.split_layer+1]
 
-		if self.location == 'Unit': # Get the holistic model
+		if self.location == 'Unit': # Get the holistic models
 			pass
 
 		for x in cfg:

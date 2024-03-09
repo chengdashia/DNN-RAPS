@@ -1,7 +1,7 @@
 # ip及对应节点位序
 from Communicator import Communicator
 import torch
-from VGG import VGG
+from models.VGG import VGG
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -108,9 +108,9 @@ def node_inference(node, model):
 
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
-    # for name, module in model.named_children():
+    # for name, module in models.named_children():
     #   print(f"Name: {name} | Module: {module}")
-    # print(model)
+    # print(models)
     feature_s = []
     dense_s = []
     if type == "M":
@@ -158,15 +158,15 @@ def start_inference():
     include_first = False
     node = node_end(host_ip, host_port)
     # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
-    # model= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
-    # model= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
+    # models= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
+    # models= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
 
     model = VGG("Client", model_name, 6, model_cfg)
     model.eval()
-    model.load_state_dict(torch.load("model.pth"))
+    model.load_state_dict(torch.load("models/vgg.pth"))
 
     # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    # print("moddel layer",model)
+    # print("moddel layer",models)
 
     # 如果含第一层，载入数据
     if include_first:

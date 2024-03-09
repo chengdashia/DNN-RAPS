@@ -11,54 +11,15 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import socket
 import time
-import random
 from models.model_struct import model_cfg
 from config import CLIENTS_CONFIG, CLIENTS_LIST
-
-
-# To automatically select segmentation points in the network with minimal performance loss
-# The idea is to avoid splitting at critical layers (like the first and last layers) and
-# balance the computational load across segments.
-# and contains the network's layer configurations
-# 随机选择分割点
-def select_segmentation_points(model_cfg, num_segments):
-    """
-    Automatically selects segmentation points for the network.
-    :param model_cfg: Configuration of the network models
-    :param num_segments: Desired number of segments
-    :return: List of segmentation indices
-    """
-    # 由于num_segments=3，我们需要2个分割点来将网络分割成3部分
-    num_split_points = num_segments - 1
-
-    total_layers = len(model_cfg['VGG5'])
-
-    # 生成一个包含所有可用于分割的层的列表，避开第一层和最后一层
-    eligible_layers = list(range(1, total_layers - 1))
-
-    # 从可用层中随机选择所需数量的分割点
-    segmentation_points = sorted(random.sample(eligible_layers, min(num_split_points, len(eligible_layers))))
-
-    return segmentation_points
-    # return sorted(random.sample(segmentation_points, min(num_segments, len(segmentation_points))))
-
-# def choose_split_points(models, num_splits=3):
-#     eligible_layers = [i for i, layer in enumerate(models.children()) if isinstance(layer, (nn.Conv3d, nn.Linear))]
-#     return sorted(random.sample(eligible_layers, min(num_splits, len(eligible_layers))))
-#
-# # 创建模型实例
-# models = VideoRecognitionCNN()
-# # 随机选择分割点
-# split_points = choose_split_points(models)
+from utils.segmentation_strategy import select_segmentation_points
 
 
 # Segment the network
-num_segments = 3  # Number of desired segments
-segmentation_points = select_segmentation_points(model_cfg, num_segments)
+segmentation_points = select_segmentation_points(model_cfg)
 print('*'*40)
 print(segmentation_points)
-
-
 
 # Now, segment the network based on the selected points
 def segment_network(model_cfg, segmentation_points):

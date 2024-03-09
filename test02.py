@@ -1,17 +1,7 @@
+from config import server_list,CLIENTS_CONFIG,CLIENTS_LIST
+from utils.resource_utilization import get_all_server_info
 if __name__ == '__main__':
-    infos = {
-        "192.168.215.129": {
-            "cpu": "",
-            "gpu": "",
-            "memory": "",
-            "network": ""
-        },
-        "192.168.215.130": {
-            "cpu": "",
-            "gpu": "",
-            "memory": "",
-        },
-    }
-    for info in infos:
-        print(info)
-        print(infos[info])
+    infos = get_all_server_info(server_list)
+    print(infos)
+    print(CLIENTS_CONFIG)
+    print(CLIENTS_LIST)

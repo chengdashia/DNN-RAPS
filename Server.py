@@ -1,40 +1,20 @@
 """
     服务器执行文件，主要负责：
-        根据客户端的资源使用情况。将模型文件进行分层
+        1、根据客户端的资源使用情况。将模型文件进行分层
 """
 # ip及对应节点位序
 from Communicator import Communicator
 import torch
-from models.VGG import VGG
+from models.vgg.VGG import VGG
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import socket
 import time
 import random
+from models.model_struct import model_cfg
+from config import CLIENTS_CONFIG, CLIENTS_LIST
 
-CLIENTS_CONFIG = {"192.168.215.128": 0, "192.168.215.129": 1, "192.168.215.130": 2}
-CLIENTS_LIST = ["192.168.215.128", "192.168.215.129", "192.168.215.130"]
-# CLIENTS_CONFIG = {"192.168.234.128": 0, "192.168.234.130": 1, "192.168.234.129": 2}
-# CLIENTS_LIST = ["192.168.234.128", "192.168.234.130", "192.168.234.129"]
-# Model configration
-model_cfg = {
-    # (Type, in_channels, out_channels, kernel_size, out_size(c_out*h*w), flops(c_out*h*w*k*k*c_in))
-    "VGG5": [
-        ("C", 3, 32, 3, 32 * 32 * 32, 32 * 32 * 32 * 3 * 3 * 3),
-        ("M", 32, 32, 2, 32 * 16 * 16, 0),
-        ("C", 32, 64, 3, 64 * 16 * 16, 64 * 16 * 16 * 3 * 3 * 32),
-        ("M", 64, 64, 2, 64 * 8 * 8, 0),
-        ("C", 64, 64, 3, 64 * 8 * 8, 64 * 8 * 8 * 3 * 3 * 64),
-        ("D", 8 * 8 * 64, 128, 1, 64, 128 * 8 * 8 * 64),
-        ("D", 128, 10, 1, 10, 128 * 10),
-    ]
-}
-
-# 在每个节点上计算的第k层
-# split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
-#
-# reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
 
 # To automatically select segmentation points in the network with minimal performance loss
 # The idea is to avoid splitting at critical layers (like the first and last layers) and
@@ -260,7 +240,7 @@ def start_inference():
 
     model = VGG("Client", model_name, 6, model_cfg)
     model.eval()
-    model.load_state_dict(torch.load("models/vgg.pth"))
+    model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
     # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     #print("moddel layer",models)

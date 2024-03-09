@@ -4,26 +4,6 @@
 """
 import paramiko
 
-# 服务器信息
-server_list = [
-    {
-        "ip": "192.168.215.129",
-        "username": "root",
-        "password": "123456"
-    },
-    {
-        "ip": "192.168.215.130",
-        "username": "root",
-        "password": "123456"
-    },
-    {
-        "ip": "192.168.215.131",
-        "username": "root",
-        "password": "123456"
-    }
-    # 添加更多服务器
-]
-
 # 获取服务器资源使用情况的命令
 commands = {
     # 获取 CPU 使用率

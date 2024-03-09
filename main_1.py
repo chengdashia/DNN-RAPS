@@ -1,7 +1,7 @@
 # ip及对应节点位序
 from Communicator import Communicator
 import torch
-from models.VGG import VGG
+from models.vgg.VGG import VGG
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -161,7 +161,7 @@ def start_inference():
 
     model = VGG("Client", model_name, 6, model_cfg)
     model.eval()
-    model.load_state_dict(torch.load("models/vgg.pth"))
+    model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
     # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     # print("moddel layer",models)

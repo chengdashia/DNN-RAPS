@@ -1,0 +1,21 @@
+# 服务器信息
+server_list = [
+    {
+        "ip": "192.168.215.129",
+        "username": "root",
+        "password": "123456"
+    },
+    {
+        "ip": "192.168.215.130",
+        "username": "root",
+        "password": "123456"
+    },
+    {
+        "ip": "192.168.215.131",
+        "username": "root",
+        "password": "123456"
+    }
+    # 添加更多服务器
+]
+CLIENTS_CONFIG = {server["ip"]: i for i, server in enumerate(server_list)}
+CLIENTS_LIST = [server["ip"] for server in server_list]

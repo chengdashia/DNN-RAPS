@@ -7,14 +7,12 @@ from config import CLIENTS_NUMBERS
 
 # 网络分割策略类
 class NetworkSegmentationStrategy:
-    def __init__(self, model_cfg, servers_info):
+    def __init__(self, model_cfg):
         """
         Initialize the NetworkSegmentationStrategy class with the network configuration.
         :param model_cfg: Configuration of the network models
-        :param servers_info: Information on resource utilization of all servers
         """
         self.model_cfg = model_cfg
-        self.servers_info = servers_info
 
     # To automatically select segmentation points in the network with minimal performance loss
     # The idea is to avoid splitting at critical layers (like the first and last layers) and
@@ -26,6 +24,7 @@ class NetworkSegmentationStrategy:
         :return: List of segmentation indices
         """
         num_split_points = CLIENTS_NUMBERS - 1
+        print(self.model_cfg)
 
         total_layers = len(self.model_cfg['VGG5'])
 
@@ -34,4 +33,3 @@ class NetworkSegmentationStrategy:
 
         # 从可用层中随机选择所需数量的分割点
         return sorted(random.sample(eligible_layers, min(num_split_points, len(eligible_layers))))
-

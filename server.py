@@ -16,7 +16,8 @@ from models.model_struct import model_cfg
 from utils.segmentation_strategy import NetworkSegmentationStrategy
 
 # 选取分割点
-segmentation_points = NetworkSegmentationStrategy.random_select_segmentation_points(model_cfg)
+segmentation_strategy = NetworkSegmentationStrategy(model_cfg)
+segmentation_points = segmentation_strategy.random_select_segmentation_points()
 print('*'*40)
 print("segmentation_points: ", segmentation_points)
 
@@ -57,7 +58,7 @@ def segmented_index(split_models):
     # split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
     # reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
     print("split_layers: ", split_layers)
-    print("reverse_split_layers: ",reverse_split_layers)
+    print("reverse_split_layers: ", reverse_split_layers)
     return split_layers, reverse_split_layers
 
 
@@ -74,53 +75,57 @@ loss_list = []
 model_name = "VGG5"
 model_len = len(model_cfg[model_name])
 
-# data length
-N = 10000
-# Batch size
-B = 256
 
 # 假设本节点为节点0
-class node_end(Communicator):
-    def __init__(self,host_ip,host_port):
-        super(node_end, self).__init__(host_ip,host_port)
+class NodeConnection(Communicator):
+    def __init__(self, ip, port):
+        # 调用父类communicator的构造函数来初始化
+        super(NodeConnection, self).__init__(ip, port)
 
-    def add_addr(self, node_addr, node_port):
-        while True:
+    def add_addr(self, node_addr, node_port, max_retries=10):
+        # 尝试连接的次数
+        attempts = 0
+        while attempts < max_retries:
             try:
+                # 尝试创建到下一个节点的连接
                 self.sock.connect((node_addr, node_port))
-                break  # If the connection is successful, break the loop
+                # 如果连接成功，则跳出循环
+                print(f"已成功连接到{node_addr}:{node_port}")
+                # If the connection is successful, break the loop
+                break
             except socket.error as e:
-                print(f"Failed to connect to {node_addr}:{node_port}, retrying...")
-                time.sleep(1)  # Wait for a while before retrying
+                # 如果连接失败，打印错误消息并重试
+                print(f"连接到{node_addr}:{node_port}失败，正在重试...错误：{e}")
+                # 等待一段时间再次尝试
+                time.sleep(1)
+                # 增加尝试连接的次数
+                attempts += 1
+        if attempts == max_retries:
+            # 如果达到最大重试次数，则抛出异常
+            raise Exception(f"无法连接到{node_addr}:{node_port}， 已达到最大重试次数{max_retries}")
 
-#     def send_segmentation_points(self, sock, segmentation_points):
-#         msg = ['SegmentationPoints', segmentation_points]
-#         self.send_msg(sock, msg)
-# # 示例：发送分割点到下一个节点
-# node_instance = node_end(host_ip, host_port)
-# next_node_sock =node_instance.sock  # 获取下一个节点的套接字
-# node_instance.send_segmentation_points(next_node_sock, segmentation_points)
 
-
-# TODO:理解这个函数
+# 计算准确度
 def calculate_accuracy(fx, y):
     preds = fx.max(1, keepdim=True)[1]
-    #print("preds={}, y.view_as(preds)={}".format(preds, y.view_as(preds)))
+    # print("preds={}, y.view_as(preds)={}".format(preds, y.view_as(preds)))
     correct = preds.eq(y.view_as(preds)).sum()
     acc = 100.00 * correct.float() / preds.shape[0]
     return acc
 
 
+# 节点推理
 def node_inference(node, model):
-    node.__init__(host_ip,host_port)
+    node.__init__(host_ip, host_port)
     while True:
-        global reverse_split_layer,split_layer
-        last_send_ips=[]
-        iteration = int(N / B)
+        global reverse_split_layer, split_layer
+        last_send_ips = []
+        iteration = int(config.N / config.B)
         node_socket, node_addr = node.wait_for_connection()
         for i in range(iteration):
             print("node_{host_node_num} get connection from node{node_addr}")
-            msg = node.recv_msg(node_socket)
+            msg = node.receive_message(node_socket)
+            print("msg:  ", msg)
             data = msg[1]
             target = msg[2]
             start_layer = msg[3]
@@ -128,12 +133,12 @@ def node_inference(node, model):
             reverse_split_layer = msg[5]
             data, next_layer, split = calculate_output(model, data, start_layer)
             if split + 1 < model_len:
-                last_send_ip=config.CLIENTS_LIST[reverse_split_layer[split + 1]]
+                last_send_ip = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
                 if last_send_ip not in last_send_ips:
                     node.add_addr(last_send_ip, 1998)
                 last_send_ips.append(last_send_ip)
-                msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
-                node.send_msg(node.sock, msg)
+                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
+                node.send_message(node.sock, msg)
                 print(
                     f"node_{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
                 )
@@ -144,29 +149,29 @@ def node_inference(node, model):
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
                 print("")
         node_socket.close()
-        node.__init__(host_ip,host_port)
+        node.__init__(host_ip, host_port)
 
+
+# 获取模型
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
-    # for name, module in models.named_children():
-    #   print(f"Name: {name} | Module: {module}")
-    # print(models)
-    feature_s = []
+    features = []
     dense_s = []
     if type == "M":
-        feature_s.append(model.features[start_layer])
+        features.append(model.features[start_layer])
         start_layer += 1
     if type == "D":
-        ## TODO:denses' modify the start_layer
+        # modify the start_layer
         dense_s.append(model.denses[start_layer-11])
         start_layer += 1
     if type == "C":
         for i in range(3):
-            feature_s.append(model.features[start_layer])
+            features.append(model.features[start_layer])
             start_layer += 1
     next_layer = start_layer
-    return nn.Sequential(*feature_s), nn.Sequential(*dense_s), next_layer
+    return nn.Sequential(*features), nn.Sequential(*dense_s), next_layer
 
 
+# 计算输出
 def calculate_output(model, data, start_layer):
     for split in split_layer[host_node_num]:
         # TODO:如果节点上的层不相邻，需要兼容
@@ -185,20 +190,17 @@ def calculate_output(model, data, start_layer):
 
         data = model_layer(data)
         start_layer = next_layer
-        #print("next_layer", next_layer)
+        # print("next_layer", next_layer)
     return data, next_layer, split
 
 
+# 开始推理
 def start_inference():
     include_first = True
-    node = node_end(host_ip, host_port)
-
+    node = NodeConnection(host_ip, host_port)
     model = VGG("Client", model_name, 6, model_cfg)
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
-
-    # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    #print("moddel layer",models)
 
     # 如果含第一层，载入数据
     if include_first:
@@ -220,9 +222,9 @@ def start_inference():
             test_dataset, batch_size=256, shuffle=False, num_workers=4
         )
 
-        last_send_ips=[]
+        last_send_ips = []
         for data, target in test_loader:
-            #print(len(data))
+            # print(len(data))
             # split:当前节点计算的层
             # next_layer:下一个权重层
             data, next_layer, split = calculate_output(model, data, start_layer)
@@ -239,7 +241,7 @@ def start_inference():
             print(
                 f"node{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
             )
-            node.send_msg(node.sock, msg)
+            node.send_message(node.sock, msg)
             include_first = False
             # print('*' * 40)
         node.sock.close()

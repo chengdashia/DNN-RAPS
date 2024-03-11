@@ -8,32 +8,15 @@ import torch.nn as nn
 import socket
 import time
 
-# CLIENTS_CONFIG = {"192.168.234.128": 0, "192.168.234.130": 1, "192.168.234.129": 2}
-# CLIENTS_LIST = ["192.168.234.128", "192.168.234.130", "192.168.234.129"]
-CLIENTS_CONFIG = {"127.0.0.1": 0, "127.0.0.1": 1, "127.0.0.1": 2}
-CLIENTS_LIST = ["127.0.0.1", "127.0.0.1", "127.0.0.1"]
-# Model configration
-model_cfg = {
-    # (Type, in_channels, out_channels, kernel_size, out_size(c_out*h*w), flops(c_out*h*w*k*k*c_in))
-    "VGG5": [
-        ("C", 3, 32, 3, 32 * 32 * 32, 32 * 32 * 32 * 3 * 3 * 3),
-        ("M", 32, 32, 2, 32 * 16 * 16, 0),
-        ("C", 32, 64, 3, 64 * 16 * 16, 64 * 16 * 16 * 3 * 3 * 32),
-        ("M", 64, 64, 2, 64 * 8 * 8, 0),
-        ("C", 64, 64, 3, 64 * 8 * 8, 64 * 8 * 8 * 3 * 3 * 64),
-        ("D", 8 * 8 * 64, 128, 1, 64, 128 * 8 * 8 * 64),
-        ("D", 128, 10, 1, 10, 128 * 10),
-    ]
-}
+import config
 
 # 在每个节点上计算的第k层
 split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
-
 reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
 
 host_port = 1998
 host_node_num = 1
-host_ip = CLIENTS_LIST[host_node_num]
+host_ip = config.CLIENTS_LIST[host_node_num]
 
 info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
 
@@ -41,7 +24,7 @@ loss_list = []
 
 model_name = "VGG5"
 
-model_len = len(model_cfg[model_name])
+model_len = len(config.model_cfg[model_name])
 
 N = 10000 # data length
 B = 256 # Batch size
@@ -73,33 +56,33 @@ def calculate_accuracy(fx, y):
 def node_inference(node, model):
 
     while 1:
-        global split_layer,reverse_split_layer
-        last_send_ips=[]
+        global split_layer, reverse_split_layer
+        last_send_ips = []
         iteration = int(N / B)
         node_socket, node_addr = node.wait_for_connection()
         for i in range(iteration):
 
             print(f"node{host_node_num} get connection from node{node_addr}")
-            msg = node.recv_msg(node_socket)
+            msg = node.receive_message(node_socket)
             # print(msg[0])
             data = msg[1]
             target = msg[2]
             start_layer = msg[3]
-            split_layer=msg[4]
-            reverse_split_layer=msg[5]
+            split_layer = msg[4]
+            reverse_split_layer = msg[5]
             data, next_layer, split = calculate_output(model, data, start_layer)
             if split + 1 < model_len:
 
                 print("*"*100)
                 print(reverse_split_layer)
-                last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
+                last_send_ip=config.CLIENTS_LIST[reverse_split_layer[split + 1]]
                 if last_send_ip not in last_send_ips:
                     node.add_addr(last_send_ip, 1999)
                 last_send_ips.append(last_send_ip)
-                msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
-                node.send_msg(node.sock, msg)
+                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
+                node.send_message(node.sock, msg)
                 print(
-                    f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                    f"node{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
                 )
             else:
                 # 到达最后一层，计算损失
@@ -107,7 +90,7 @@ def node_inference(node, model):
                 loss_list.append(loss)
                 print("loss :{}".format(sum(loss_list) / len(loss_list)))
         node_socket.close()
-        node.__init__(host_ip,host_port)
+        node.__init__(host_ip, host_port)
 
 
 def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
@@ -133,10 +116,10 @@ def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
 def calculate_output(model, data, start_layer):
     for split in split_layer[host_node_num]:
         # TODO:如果节点上的层不相邻，需要兼容
-        type = model_cfg[model_name][split][0]
-        in_channels = model_cfg[model_name][split][1]
-        out_channels = model_cfg[model_name][split][2]
-        kernel_size = model_cfg[model_name][split][3]
+        type = config.model_cfg[model_name][split][0]
+        in_channels = config.model_cfg[model_name][split][1]
+        out_channels = config.model_cfg[model_name][split][2]
+        kernel_size = config.model_cfg[model_name][split][3]
         # print("type,in_channels,out_channels,kernel_size",type,in_channels,out_channels,kernel_size)
         features, dense, next_layer = get_model(
             model, type, in_channels, out_channels, kernel_size, start_layer
@@ -159,7 +142,7 @@ def start_inference():
     # models= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
     # models= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
 
-    model = VGG("Client", model_name, 6, model_cfg)
+    model = VGG("Client", model_name, 6, config.model_cfg)
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
@@ -194,16 +177,16 @@ def start_inference():
             data, next_layer, split = calculate_output(model, data, start_layer)
 
             # TODO:modify the port
-            last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
+            last_send_ip = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
             if last_send_ip not in last_send_ips:
                 node.add_addr(last_send_ip, 1999)
             last_send_ips.append(last_send_ip)
             # TODO:是否发送labels
             msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
             print(
-                f"node_{host_node_num} send msg to node_{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                f"node_{host_node_num} send msg to node_{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
             )
-            node.send_msg(node.sock, msg)
+            node.send_message(node.sock, msg)
             include_first = False
             print('*'*40)
         node.sock.close()

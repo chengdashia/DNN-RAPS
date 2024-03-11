@@ -22,3 +22,8 @@ server_list = [
 CLIENTS_CONFIG = {server["ip"]: i for i, server in enumerate(server_list)}
 CLIENTS_LIST = [server["ip"] for server in server_list]
 CLIENTS_NUMBERS = len(CLIENTS_LIST)
+
+# data length
+N = 10000
+# Batch size
+B = 256

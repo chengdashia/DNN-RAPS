@@ -76,7 +76,7 @@ def node_inference(node, model):
         for i in range(iteration):
 
             print(f"node{host_node_num} get connection from node{node_addr}")
-            msg = node.recv_msg(node_socket)
+            msg = node.receive_message(node_socket)
             data = msg[1]
             target = msg[2]
             start_layer = msg[3]
@@ -89,7 +89,7 @@ def node_inference(node, model):
                     node.add_addr(last_send_ip, 2000)
                 last_send_ips.append(last_send_ip)
                 msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
-                node.send_msg(node.sock, msg)
+                node.send_message(node.sock, msg)
                 print(
                     f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
                 )
@@ -206,7 +206,7 @@ def start_inference():
             print(
                 f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
             )
-            node.send_msg(node.sock, msg)
+            node.send_message(node.sock, msg)
             include_first = False
 
     node_inference(node, model)

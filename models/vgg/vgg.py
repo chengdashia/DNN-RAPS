@@ -26,12 +26,12 @@ class VGG(nn.Module):
 		features = []
 		denses = []
 		if self.location == 'Server':
-			cfg = cfg[self.split_layer+1 :]
+			cfg = cfg[self.split_layer + 1:]
 			
 		if self.location == 'Client':
-			cfg = cfg[:self.split_layer+1]
-
-		if self.location == 'Unit': # Get the holistic models
+			cfg = cfg[:self.split_layer + 1]
+		# Get the holistic models
+		if self.location == 'Unit':
 			pass
 
 		for x in cfg:
@@ -42,10 +42,11 @@ class VGG(nn.Module):
 			if x[0] == 'D':
 				denses += [nn.Linear(in_channels,out_channels)]
 			if x[0] == 'C':
-				features += [nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=1),
-						   nn.BatchNorm2d(out_channels),
-						   nn.ReLU(inplace=True)]
-
+				features += [
+					nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=1),
+					nn.BatchNorm2d(out_channels),
+					nn.ReLU(inplace=True)
+				]
 		return nn.Sequential(*features), nn.Sequential(*denses)
 
 	def _initialize_weights(self):

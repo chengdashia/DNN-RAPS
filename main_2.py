@@ -1,7 +1,7 @@
 # ip及对应节点位序
-from Communicator import Communicator
+from communicator import Communicator
 import torch
-from models.vgg.VGG import VGG
+from models.vgg.vgg import VGG
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn as nn

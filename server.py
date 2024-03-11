@@ -1,41 +1,71 @@
 """
     服务器执行文件，主要负责：
         1、根据客户端的资源使用情况。将模型文件进行分层
+        ip及对应节点位序
 """
-# ip及对应节点位序
-from Communicator import Communicator
-import torch
-from models.vgg.VGG import VGG
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
-import torch.nn as nn
-import socket
 import time
+import socket
+import torch
+from torch import nn
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+import config
+from communicator import Communicator
+from models.vgg.vgg import VGG
 from models.model_struct import model_cfg
-from config import CLIENTS_LIST
-from utils.segmentation_strategy import random_select_segmentation_points
-from utils.dnn_partition import segment_network
-from utils.utils import segmented_index
+from utils.segmentation_strategy import NetworkSegmentationStrategy
 
-
-# Segment the network
-segmentation_points = random_select_segmentation_points(model_cfg)
+# 选取分割点
+segmentation_points = NetworkSegmentationStrategy.random_select_segmentation_points(model_cfg)
 print('*'*40)
-print(segmentation_points)
+print("segmentation_points: ", segmentation_points)
 
-# Now, segment the network based on the selected points
-segmented_models = segment_network(model_cfg, segmentation_points)
+
+# 根据选取的分割点 分割网络
+def segment_network(split_points):
+    segments = []
+    start = 0
+    for point in split_points:
+        segments.append(model_cfg['VGG5'][start:point])
+        start = point
+    segments.append(model_cfg['VGG5'][start:])  # Add the last segment
+    # Print the layer configurations for each segment and the segmentation points
+    for i, segment in enumerate(segments):
+        print(f"Segment {i + 1}:")
+        for layer_cfg in segment:
+            print(layer_cfg)
+        print("\n")  # New line for better readability between segments
+    return segments
+
+
+# 根据选取的分割点分割网络
+segmented_models = segment_network(segmentation_points)
 print("segmented_models", segmented_models)
 
-# segments now contains the segmented layers of the network
+
 # 在每个节点上计算的第k层
-# split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
-# reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
+def segmented_index(split_models):
+    split_layers = {}
+    reverse_split_layers = {}
+    start_index = 0
+    for i, model in enumerate(split_models):
+        layer_indices = list(range(start_index, start_index + len(model)))
+        split_layers[i] = layer_indices
+        for j in layer_indices:
+            reverse_split_layers[j] = i
+        start_index += len(model)
+    # split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
+    # reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
+    print("split_layers: ", split_layers)
+    print("reverse_split_layers: ",reverse_split_layers)
+    return split_layers, reverse_split_layers
+
+
 split_layer, reverse_split_layer = segmented_index(segmented_models)
 
 host_port = 9001
 host_node_num = 0
-host_ip = CLIENTS_LIST[host_node_num]
+host_ip = config.CLIENTS_LIST[host_node_num]
 
 info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
 
@@ -44,10 +74,12 @@ loss_list = []
 model_name = "VGG5"
 model_len = len(model_cfg[model_name])
 
-N = 10000 # data length
-B = 256 # Batch size
+# data length
+N = 10000
+# Batch size
+B = 256
 
-### 假设本节点为节点0
+# 假设本节点为节点0
 class node_end(Communicator):
     def __init__(self,host_ip,host_port):
         super(node_end, self).__init__(host_ip,host_port)
@@ -96,14 +128,14 @@ def node_inference(node, model):
             reverse_split_layer = msg[5]
             data, next_layer, split = calculate_output(model, data, start_layer)
             if split + 1 < model_len:
-                last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
+                last_send_ip=config.CLIENTS_LIST[reverse_split_layer[split + 1]]
                 if last_send_ip not in last_send_ips:
                     node.add_addr(last_send_ip, 1998)
                 last_send_ips.append(last_send_ip)
                 msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
                 node.send_msg(node.sock, msg)
                 print(
-                    f"node_{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                    f"node_{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
                 )
             else:
                 # 到达最后一层，计算损失
@@ -196,7 +228,7 @@ def start_inference():
             data, next_layer, split = calculate_output(model, data, start_layer)
 
             # TODO:modify the port
-            last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
+            last_send_ip=config.CLIENTS_LIST[reverse_split_layer[split + 1]]
             if last_send_ip not in last_send_ips:
                 node.add_addr(last_send_ip, 1998)
 
@@ -205,7 +237,7 @@ def start_inference():
             # TODO:是否发送labels
             msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
             print(
-                f"node{host_node_num} send msg to node{CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                f"node{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
             )
             node.send_msg(node.sock, msg)
             include_first = False

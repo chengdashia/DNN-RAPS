@@ -5,17 +5,26 @@ server_list = [
     {
         "ip": "192.168.215.129",
         "username": "root",
-        "password": "123456"
+        "password": "123456",
+        "application": {
+            "vgg": 9001
+        }
     },
     {
         "ip": "192.168.215.130",
         "username": "root",
-        "password": "123456"
+        "password": "123456",
+        "application": {
+            "vgg": 9001
+        }
     },
     {
         "ip": "192.168.215.131",
         "username": "root",
-        "password": "123456"
+        "password": "123456",
+        "application": {
+            "vgg": 9001
+        }
     }
     # 添加更多服务器
 ]

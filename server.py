@@ -3,23 +3,15 @@
         1、根据客户端的资源使用情况。将模型文件进行分层
         ip及对应节点位序
 """
-import time
-import socket
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import config
-from communicator import Communicator
+from node_connection import NodeConnection
 from models.vgg.vgg import VGG
 from models.model_struct import model_cfg
 from utils.segmentation_strategy import NetworkSegmentationStrategy
-
-# 选取分割点
-segmentation_strategy = NetworkSegmentationStrategy(model_cfg)
-segmentation_points = segmentation_strategy.random_select_segmentation_points()
-print('*'*40)
-print("segmentation_points: ", segmentation_points)
 
 
 # 根据选取的分割点 分割网络
@@ -39,11 +31,6 @@ def segment_network(split_points):
     return segments
 
 
-# 根据选取的分割点分割网络
-segmented_models = segment_network(segmentation_points)
-print("segmented_models", segmented_models)
-
-
 # 在每个节点上计算的第k层
 def segmented_index(split_models):
     split_layers = {}
@@ -60,49 +47,6 @@ def segmented_index(split_models):
     print("split_layers: ", split_layers)
     print("reverse_split_layers: ", reverse_split_layers)
     return split_layers, reverse_split_layers
-
-
-split_layer, reverse_split_layer = segmented_index(segmented_models)
-
-host_port = 9001
-host_node_num = 0
-host_ip = config.CLIENTS_LIST[host_node_num]
-
-info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
-
-loss_list = []
-
-model_name = "VGG5"
-model_len = len(model_cfg[model_name])
-
-
-# 假设本节点为节点0
-class NodeConnection(Communicator):
-    def __init__(self, ip, port):
-        # 调用父类communicator的构造函数来初始化
-        super(NodeConnection, self).__init__(ip, port)
-
-    def add_addr(self, node_addr, node_port, max_retries=10):
-        # 尝试连接的次数
-        attempts = 0
-        while attempts < max_retries:
-            try:
-                # 尝试创建到下一个节点的连接
-                self.sock.connect((node_addr, node_port))
-                # 如果连接成功，则跳出循环
-                print(f"已成功连接到{node_addr}:{node_port}")
-                # If the connection is successful, break the loop
-                break
-            except socket.error as e:
-                # 如果连接失败，打印错误消息并重试
-                print(f"连接到{node_addr}:{node_port}失败，正在重试...错误：{e}")
-                # 等待一段时间再次尝试
-                time.sleep(1)
-                # 增加尝试连接的次数
-                attempts += 1
-        if attempts == max_retries:
-            # 如果达到最大重试次数，则抛出异常
-            raise Exception(f"无法连接到{node_addr}:{node_port}， 已达到最大重试次数{max_retries}")
 
 
 # 计算准确度
@@ -248,6 +192,29 @@ def start_inference():
     node_inference(node, model)
 
 
-# start_inference()
 if __name__ == '__main__':
+    # 选取分割点
+    segmentation_strategy = NetworkSegmentationStrategy(model_cfg)
+    segmentation_points = segmentation_strategy.random_select_segmentation_points()
+    print('*' * 40)
+    print("segmentation_points: ", segmentation_points)
+
+    # 根据选取的分割点分割网络
+    segmented_models = segment_network(segmentation_points)
+    print("segmented_models", segmented_models)
+
+    split_layer, reverse_split_layer = segmented_index(segmented_models)
+
+    host_port = 9001
+    host_node_num = 0
+    host_ip = config.CLIENTS_LIST[host_node_num]
+
+    info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
+
+    loss_list = []
+
+    model_name = "VGG5"
+    model_len = len(model_cfg[model_name])
+
+    # 开始推理
     start_inference()

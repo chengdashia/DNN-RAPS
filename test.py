@@ -3,6 +3,7 @@ from utils.segmentation_strategy import NetworkSegmentationStrategy
 from models.model_struct import model_cfg
 if __name__ == '__main__':
     model_name = 'VGG5'
+
     # 获取所有节点的资源情况
     nodes_resource_infos = get_all_server_info()
 

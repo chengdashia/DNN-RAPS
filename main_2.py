@@ -53,7 +53,7 @@ class node_end(Communicator):
     def add_addr(self, node_addr, node_port):
         while True:
             try:
-                self.sock.connect((node_addr, node_port))
+                self.sock.connect((node_addr, node_port), )
                 break  # If the connection is successful, break the loop
             except socket.error as e:
                 print(f"Failed to connect to {node_addr}:{node_port}, retrying...")

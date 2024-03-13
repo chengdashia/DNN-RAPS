@@ -274,10 +274,10 @@ if __name__ == '__main__':
     model_len = len(model_cfg[model_name])
 
     # 获取所有节点的资源情况
-    nodes_resource_infos = get_all_server_info(config.server_list)
+    nodes_resource_infos = get_all_server_info()
 
     # 根据不同的分割策略,选取分割点
-    segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg, nodes_resource_infos)
+    segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg)
     segmentation_points = segmentation_strategy.random_select_segmentation_points()
     print('*' * 40)
     print("segmentation_points: ", segmentation_points)

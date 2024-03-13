@@ -3,6 +3,7 @@
     获取服务器资源使用情况
 """
 import paramiko
+from config import server_list
 
 # 获取服务器资源使用情况的命令
 commands = {
@@ -49,11 +50,11 @@ def get_single_server_info(server_info):
 
 
 # 获取全部服务器的资源利用率
-def get_all_server_info(servers):
+def get_all_server_info():
     # 创建一个字典来存储所有服务器的信息
     infos = {}
     # 遍历服务器列表,对每个服务器执行信息获取
-    for server_info in servers:
+    for server_info in server_list:
         # 调用 get_info 函数获取单个服务器的信息
         server_resources = get_single_server_info(server_info)
 

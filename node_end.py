@@ -3,12 +3,12 @@ import time
 from communicator import Communicator
 
 
-class NodeConnection(Communicator):
+class NodeEnd(Communicator):
     def __init__(self, ip, port):
         # 调用父类communicator的构造函数来初始化
-        super(NodeConnection, self).__init__(ip, port)
+        super(NodeEnd, self).__init__(ip, port)
 
-    def add_addr(self, node_addr, node_port, max_retries=10):
+    def connect(self, node_addr, node_port, max_retries=10):
         # 尝试连接的次数
         attempts = 0
         while attempts < max_retries:

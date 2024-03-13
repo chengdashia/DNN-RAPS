@@ -86,7 +86,7 @@ def node_inference(node, model):
             if split + 1 < model_len:
                 last_send_ip=CLIENTS_LIST[reverse_split_layer[split + 1]]
                 if last_send_ip not in last_send_ips:
-                    node.add_addr(last_send_ip, 2000)
+                    node.connect(last_send_ip, 2000)
                 last_send_ips.append(last_send_ip)
                 msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
                 node.send_message(node.sock, msg)

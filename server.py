@@ -12,7 +12,7 @@ import config
 from node_end import NodeEnd
 from models.vgg.vgg import VGG
 from models.model_struct import model_cfg
-from utils.segmentation_strategy import NetworkSegmentationStrategy
+from utils.segment_strategy import NetworkSegmentationStrategy
 from utils.resource_utilization import get_all_server_info
 
 

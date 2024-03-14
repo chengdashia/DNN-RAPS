@@ -1,3 +1,6 @@
+"""
+ 用于通信的json数据的，python对象
+"""
 import json
 
 

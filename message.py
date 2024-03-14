@@ -26,7 +26,7 @@ class Message:
     def from_json(json_data):
         message_dict = json.loads(json_data)
         message_type = message_dict['type']
-        content = message_dict['data']
+        data = message_dict['data']
         sender = message_dict.get('sender', None)
         target = message_dict.get('target', None)
-        return Message(message_type, content, sender, target)
+        return Message(message_type, data, sender, target)

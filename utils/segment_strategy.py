@@ -39,33 +39,41 @@ class NetworkSegmentationStrategy:
         """
         根据节点资源使用情况选择分割点
         :param resource_usage: 字典,包含每个节点的CPU、GPU、内存和网络利用率
-        :return: 分割点列表
+        :return: 元组,包含分割点列表和节点层索引字典
         """
-        num_split_points = CLIENTS_NUMBERS - 1
-        total_layers = len(self.model_cfg[self.model_name])
-        eligible_layers = list(range(1, total_layers - 1))
+        num_split_points = CLIENTS_NUMBERS - 1  # 计算分割点数量
+        total_layers = len(self.model_cfg[self.model_name])  # 获取模型总层数
+        eligible_layers = list(range(1, total_layers - 1))  # 获取可用于分割的层索引列表
 
         # 按CPU、内存和网络利用率对节点进行排序
         sorted_nodes = sorted(resource_usage.items(),
                               key=lambda x: (float(x[1]['cpu'].split(':')[1]), x[1]['memory'], x[1]['network']))
 
-        segmentation_points = []
-        current_node_idx = 0
+        segmentation_points = []  # 初始化分割点列表
+        node_layer_indices = {}  # 初始化节点层索引字典
+        current_node_idx = 0  # 当前节点索引
 
         # 遍历所有层
         for layer_idx in eligible_layers:
-            layer_type, _, _, _, _, flops = self.model_cfg[self.model_name][layer_idx]
+            layer_type, _, _, _, _, flops = self.model_cfg[self.model_name][layer_idx]  # 获取当前层的信息
 
             # 将CPU利用率从字符串转换为浮点数
             current_node_cpu = float(sorted_nodes[current_node_idx][1]['cpu'].split(':')[1])
 
             # 如果当前节点资源不足以承载该层,则将其分配给下一个节点
             if layer_type == 'C' and flops > current_node_cpu:
-                current_node_idx += 1
-                segmentation_points.append(layer_idx)
+                current_node_idx += 1  # 移动到下一个节点
+                segmentation_points.append(layer_idx)  # 将当前层索引添加到分割点列表
 
             # 确保不会超过最大分割点数量
             if len(segmentation_points) >= num_split_points:
                 break
 
-        return segmentation_points
+        # 根据分割点生成节点层索引字典
+        start_idx = 0
+        for i, node_ip in enumerate(sorted_nodes):
+            end_idx = segmentation_points[i] if i < len(segmentation_points) else total_layers
+            node_layer_indices[node_ip[0]] = list(range(start_idx, end_idx))
+            start_idx = end_idx
+
+        return segmentation_points, node_layer_indices

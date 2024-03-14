@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import socket
 import time
-
+from models.model_struct import model_cfg
 import config
 
 # 在每个节点上计算的第k层
@@ -24,7 +24,7 @@ loss_list = []
 
 model_name = "VGG5"
 
-model_len = len(config.model_cfg[model_name])
+model_len = len(model_cfg[model_name])
 
 N = 10000 # data length
 B = 256 # Batch size
@@ -116,10 +116,10 @@ def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
 def calculate_output(model, data, start_layer):
     for split in split_layer[host_node_num]:
         # TODO:如果节点上的层不相邻，需要兼容
-        type = config.model_cfg[model_name][split][0]
-        in_channels = config.model_cfg[model_name][split][1]
-        out_channels = config.model_cfg[model_name][split][2]
-        kernel_size = config.model_cfg[model_name][split][3]
+        type = model_cfg[model_name][split][0]
+        in_channels = model_cfg[model_name][split][1]
+        out_channels = model_cfg[model_name][split][2]
+        kernel_size = model_cfg[model_name][split][3]
         # print("type,in_channels,out_channels,kernel_size",type,in_channels,out_channels,kernel_size)
         features, dense, next_layer = get_model(
             model, type, in_channels, out_channels, kernel_size, start_layer
@@ -142,7 +142,7 @@ def start_inference():
     # models= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
     # models= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
 
-    model = VGG("Client", model_name, 6, config.model_cfg)
+    model = VGG("Client", model_name, 6, model_cfg[model_name])
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 

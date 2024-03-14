@@ -16,53 +16,22 @@ from utils.segment_strategy import NetworkSegmentationStrategy
 from utils.resource_utilization import get_all_server_info
 
 
-def segment_network(name, split_points):
+def convert_node_layer_indices(node_to_layer):
     """
-    根据选取的分割点,将模型划分为多个segment
-    :param name: 模型名称
-    :param split_points: 分割点的列表
-    :return:
+    将节点层索引字典转换为层节点映射字典
+    :param node_to_layer: 节点层索引字典,键为节点IP,值为该节点对应的层索引列表
+    :return: 层节点映射字典,键为层索引,值为对应的节点IP
     """
-    segments = []
-    start = 0
-    for point in split_points:
-        segments.append(model_cfg[name][start:point])
-        start = point
-    # Add the last segment
-    segments.append(model_cfg[name][start:])
-    # Print the layer configurations for each segment and the segmentation points
-    logging.info("Model segments:")
-    for i, segment in enumerate(segments):
-        logging.info(f"Segment {i + 1}:")
-        for layer_cfg in segment:
-            logging.info(layer_cfg)
-        # New line for better readability between segments
-        logging.info("\n")
-    return segments
+    # 初始化层节点映射字典
+    layer_node_mapping = {}
 
+    # 遍历节点层索引字典中的每个节点
+    for node_ip, layer_indices in node_to_layer.items():
+        # 遍历该节点对应的层索引列表
+        for layer_idx in layer_indices:
+            layer_node_mapping[layer_idx] = node_ip  # 将层索引和对应的节点IP添加到层节点映射字典
 
-def get_layer_indices(split_models):
-    """
-    在每个节点上计算的第k层
-    :param split_models:
-    :return: split_layers, reverse_split_layers
-    """
-    # 键为节点索引,值为该节点上计算的层索引列表
-    split_layers = {}
-    # 键为层索引,值为该层所在节点的索引
-    reverse_split_layers = {}
-    start_index = 0
-    for i, model in enumerate(split_models):
-        layer_indices = list(range(start_index, start_index + len(model)))
-        split_layers[i] = layer_indices
-        for j in layer_indices:
-            reverse_split_layers[j] = i
-        start_index += len(model)
-    # split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
-    # reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
-    logging.info("split_layers: %s", split_layers)
-    logging.info("reverse_split_layers: %s", reverse_split_layers)
-    return split_layers, reverse_split_layers
+    return layer_node_mapping
 
 
 def calculate_accuracy(fx, y):
@@ -97,13 +66,13 @@ def node_inference(node, model):
     while True:
         global reverse_split_layer, split_layer
         # 存储已发送的IP地址
-        last_send_ips = []
+        next_clients = []
         # 迭代次数
-        iteration = int(config.N / config.B)
+        iterations = int(config.N / config.B)
         # 等待连接
         node_socket, node_addr = node.wait_for_connection()
         # 迭代处理每一批数据
-        for i in range(iteration):
+        for i in range(iterations):
             logging.info(f"node_{host_node_num} 获取来自 node{node_addr} 的连接")
             msg = node.receive_message(node_socket)
             logging.info("msg: %s", msg)
@@ -114,11 +83,11 @@ def node_inference(node, model):
             # 如果不是最后一层
             if split + 1 < model_len:
                 # 获取下一个节点的IP
-                last_send_ip = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
-                if last_send_ip not in last_send_ips:
+                next_client = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
+                if next_client not in next_clients:
                     # 添加到发送列表
-                    node.connect(last_send_ip, 1998)
-                last_send_ips.append(last_send_ip)
+                    node.connect(next_client, 1998)
+                next_clients.append(next_client)
                 msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
                 node.send_message(node.sock, msg)
                 print(
@@ -219,7 +188,7 @@ def start_inference():
     include_first = True
     # 建立连接
     node = NodeEnd(host_ip, host_port)
-    model = VGG("Client", model_name, 6, model_cfg)
+    model = VGG("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg[model_name])
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
@@ -276,17 +245,14 @@ if __name__ == '__main__':
     # 获取所有节点的资源情况
     nodes_resource_infos = get_all_server_info()
 
-    # 根据不同的分割策略,选取分割点
+    # 根据不同的分割策略
     segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg)
-    segmentation_points = segmentation_strategy.random_select_segmentation_points()
+    segmentation_points, node_layer_indices = segmentation_strategy.resource_aware_segmentation_points(nodes_resource_infos)
     print('*' * 40)
-    print("segmentation_points: ", segmentation_points)
+    print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
+    print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
 
-    # 根据选取的分割点分割网络
-    segmented_models = segment_network(model_name, segmentation_points)
-    print("segmented_models", segmented_models)
-
-    split_layer, reverse_split_layer = get_layer_indices(segmented_models)
+    layer_node = convert_node_layer_indices(node_layer_indices)
 
     host_port = 9001
     host_node_num = 0

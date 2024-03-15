@@ -7,7 +7,8 @@ server_list = [
         "username": "root",
         "password": "123456",
         "application": {
-            "VGG5": 9001
+            "VGG5": 9001,
+            "VGG6": 9002
         }
     },
     {
@@ -15,7 +16,8 @@ server_list = [
         "username": "root",
         "password": "123456",
         "application": {
-            "VGG5": 9001
+            "VGG5": 9001,
+            "VGG6": 9002
         }
     },
     {
@@ -23,7 +25,8 @@ server_list = [
         "username": "root",
         "password": "123456",
         "application": {
-            "VGG5": 9001
+            "VGG5": 9001,
+            "VGG6": 9002
         }
     }
     # 添加更多服务器

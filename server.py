@@ -14,6 +14,7 @@ from models.vgg.vgg import VGG
 from models.model_struct import model_cfg
 from utils.segment_strategy import NetworkSegmentationStrategy
 from utils.resource_utilization import get_all_server_info
+from utils.utils import get_client_app_port
 
 
 def convert_node_layer_indices(node_to_layer):
@@ -29,7 +30,8 @@ def convert_node_layer_indices(node_to_layer):
     for node_ip, layer_indices in node_to_layer.items():
         # 遍历该节点对应的层索引列表
         for layer_idx in layer_indices:
-            layer_node_mapping[layer_idx] = node_ip  # 将层索引和对应的节点IP添加到层节点映射字典
+            # 将层索引和对应的节点IP添加到层节点映射字典
+            layer_node_mapping[layer_idx] = node_ip
 
     return layer_node_mapping
 
@@ -83,15 +85,15 @@ def node_inference(node, model):
             # 如果不是最后一层
             if split + 1 < model_len:
                 # 获取下一个节点的IP
-                next_client = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
+                next_client = config.CLIENTS_LIST[layer_node[split + 1]]
                 if next_client not in next_clients:
                     # 添加到发送列表
-                    node.connect(next_client, 1998)
+                    node.connect(next_client, get_client_app_port(next_client, model_name))
                 next_clients.append(next_client)
-                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
+                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
                 node.send_message(node.sock, msg)
                 print(
-                    f"node_{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                    f"node_{host_node_num} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
                 )
             else:
                 # 到达最后一层，计算损失
@@ -214,21 +216,20 @@ def start_inference():
 
         last_send_ips = []
         for data, target in test_loader:
-            # print(len(data))
-            # split:当前节点计算的层
-            # next_layer:下一个权重层
+            # split: 当前节点计算的层
+            # next_layer: 下一个权重层
             data, next_layer, split = calculate_output(model, data, start_layer)
 
             # TODO:modify the port
-            last_send_ip = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
-            if last_send_ip not in last_send_ips:
-                node.connect(last_send_ip, 1998)
-            last_send_ips.append(last_send_ip)
+            next_client = config.CLIENTS_LIST[layer_node[split + 1]]
+            if next_client not in last_send_ips:
+                node.connect(next_client, get_client_app_port(next_client, model_name))
+            last_send_ips.append(next_client)
 
             # TODO:是否发送labels
-            msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
+            msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
             print(
-                f"node{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                f"node{host_node_num} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
             )
             node.send_message(node.sock, msg)
             include_first = False

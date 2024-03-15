@@ -214,7 +214,8 @@ def start_inference():
             test_dataset, batch_size=256, shuffle=False, num_workers=4
         )
 
-        last_send_ips = []
+        # 存储已发送的IP地址
+        sent_clients = []
         for data, target in test_loader:
             # split: 当前节点计算的层
             # next_layer: 下一个权重层
@@ -222,9 +223,9 @@ def start_inference():
 
             # TODO:modify the port
             next_client = config.CLIENTS_LIST[layer_node[split + 1]]
-            if next_client not in last_send_ips:
+            if next_client not in sent_clients:
                 node.connect(next_client, get_client_app_port(next_client, model_name))
-            last_send_ips.append(next_client)
+            sent_clients.append(next_client)
 
             # TODO:是否发送labels
             msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]

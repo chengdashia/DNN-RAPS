@@ -100,8 +100,9 @@ def node_inference(node, model):
                 loss_list.append(loss)
                 acc_list.append(acc)
 
-        print("loss :{:.4}".format(sum(loss_list) / len(loss_list)))
-        print("acc :{:.4}%".format(sum(acc_list) / len(acc_list)))
+            # 打印平均损失和平均准确率
+            print("loss :{:.4f}".format(sum(loss_list) / len(loss_list)))
+            print("acc :{:.4f}%".format(100 * sum(acc_list) / len(acc_list)))
         
         node_socket.close()
         node.__init__(host_ip,host_port)

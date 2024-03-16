@@ -66,7 +66,6 @@ def node_inference(node, model):
     # 重新初始化节点
     node.__init__(host_ip, host_port)
     while True:
-        global reverse_split_layer, split_layer
         # 存储已发送的IP地址
         next_clients = []
         # 迭代次数 N为数据总数，B为批次大小
@@ -79,7 +78,7 @@ def node_inference(node, model):
             msg = node.receive_message(node_socket)
             logging.info("msg: %s", msg)
             # 解包消息内容
-            data, target, start_layer, split_layer, reverse_split_layer = msg
+            data, target, start_layer, split_layer, layer_node = msg
             # 计算输出
             data, next_layer, split = calculate_output(model, data, start_layer)
             # 如果不是最后一层就,继续向下一个节点发送数据
@@ -237,15 +236,15 @@ def start_inference():
             data, next_layer, split = calculate_output(model, data, start_layer)
 
             # 获取下一个接收节点的地址，并建立通信
-            next_client = config.CLIENTS_LIST[layer_node[split + 1]]
+            next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
             if next_client not in sent_clients:
                 node.connect(next_client, get_client_app_port(next_client, model_name))
             sent_clients.append(next_client)
 
             # 准备发送的消息内容，可能需要包含标签
-            msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node]
+            msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
             print(
-                f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
+                f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
             )
             node.send_message(node.sock, msg)
         include_first = False
@@ -268,7 +267,7 @@ if __name__ == '__main__':
     print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
     print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
 
-    layer_node = convert_node_layer_indices(node_layer_indices)
+    layer_node_indices = convert_node_layer_indices(node_layer_indices)
 
     host_port = 9001
     host_ip = '192.168.215.129'

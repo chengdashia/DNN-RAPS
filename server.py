@@ -165,6 +165,11 @@ def calculate_output(model, data, start_layer):
     next_layer (int): 下一层索引
     split (int): 当前节点计算的最后一层索引
     """
+
+    # 定义变量，并给予默认值
+    next_layer = start_layer
+    split = None
+
     # 遍历当前主机节点上的层
     for split in node_layer_indices[host_ip]:
         # 如果节点上的层不相邻，需要实现层之间的兼容性
@@ -190,6 +195,11 @@ def calculate_output(model, data, start_layer):
 
         # 更新下一层的起始层索引
         start_layer = next_layer
+
+    # 在循环结束后，确保split有一个合理的值
+    if split is None:
+        # 如果循环没有执行，设置split为合理的默认值
+        split = start_layer  # 或者根据需要设置其他默认值
 
     return data, next_layer, split
 
@@ -262,11 +272,14 @@ if __name__ == '__main__':
 
     # 根据不同的分割策略
     segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg)
+    # segmentation_points:  [2, 4]
+    # node_layer_indices:  {'192.168.215.130': [0, 1], '192.168.215.131': [2, 3], '192.168.215.129': [4, 5, 6]}
     segmentation_points, node_layer_indices = segmentation_strategy.resource_aware_segmentation_points(nodes_resource_infos)
     print('*' * 40)
     print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
     print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
 
+    # layer_node_indices:   {0: '192.168.215.130', 1: '192.168.215.130', 2: '192.168.215.129', 3: '192.168.215.129', 4: '192.168.215.131', 5: '192.168.215.131', 6: '192.168.215.131'}
     layer_node_indices = convert_node_layer_indices(node_layer_indices)
 
     host_port = 9001

@@ -53,6 +53,24 @@ def get_layer_indices(split_models):
     return split_layers, reverse_split_layers
 
 
+def convert_node_layer_indices(node_to_layer):
+    """
+    将节点层索引字典转换为层节点映射字典
+    :param node_to_layer: 节点层索引字典,键为节点IP,值为该节点对应的层索引列表
+    :return: 层节点映射字典,键为层索引,值为对应的节点IP
+    """
+    # 初始化层节点映射字典
+    layer_node_mapping = {}
+
+    # 遍历节点层索引字典中的每个节点
+    for node_ip, layer_indices in node_to_layer.items():
+        # 遍历该节点对应的层索引列表
+        for layer_idx in layer_indices:
+            # 将层索引和对应的节点IP添加到层节点映射字典
+            layer_node_mapping[layer_idx] = node_ip
+    return layer_node_mapping
+
+
 if __name__ == '__main__':
     model_name = 'VGG5'
 
@@ -71,6 +89,9 @@ if __name__ == '__main__':
     print('*' * 40)
     print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
     print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
+
+    layer_node_indices = convert_node_layer_indices(node_layer_indices)
+    print("layer_node_indices:  ", layer_node_indices)
 
     segments = segment_network(model_name, segmentation_points)
     print("segments  : ", segments)

@@ -272,6 +272,7 @@ if __name__ == '__main__':
 
     # 根据不同的分割策略
     segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg)
+
     # segmentation_points:  [2, 4]
     # node_layer_indices:  {'192.168.215.130': [0, 1], '192.168.215.131': [2, 3], '192.168.215.129': [4, 5, 6]}
     segmentation_points, node_layer_indices = (segmentation_strategy

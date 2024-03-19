@@ -125,6 +125,40 @@ def calculate_output(model, data, start_layer):
     return data, next_layer, split
 
 
+def from_first(model, node):
+    start_layer = 0
+    data_dir = "dataset"
+    test_dataset = datasets.CIFAR10(
+        data_dir,
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        ),
+        download=True
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=256, shuffle=False, num_workers=4
+    )
+    for data, target in test_loader:
+        # split: 当前节点计算的层
+        # next_layer: 下一个权重层
+        data, next_layer, split = calculate_output(model, data, start_layer)
+
+        # 获取下一个接收节点的地址，并建立通信
+        next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
+        node.connect(next_client, get_client_app_port(next_client, model_name))
+
+        # 准备发送的消息内容，可能需要包含标签
+        msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
+        print(
+            f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
+        )
+        node.send_message(node.sock, msg)
+
+
 def node_inference(node, model):
     """
     节点推理的主要逻辑。它接收来自其他节点的数据和信息，计算输出，然后将结果发送给下一个节点。如果是最后一层，它会计算损失。
@@ -175,40 +209,6 @@ def node_inference(node, model):
         node_socket.close()
         # 重新初始化节点
         node.__init__(host_ip, host_port)
-
-
-def from_first(model, node):
-    start_layer = 0
-    data_dir = "dataset"
-    test_dataset = datasets.CIFAR10(
-        data_dir,
-        train=False,
-        transform=transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-            ]
-        ),
-        download=True
-    )
-    test_loader = DataLoader(
-        test_dataset, batch_size=256, shuffle=False, num_workers=4
-    )
-    for data, target in test_loader:
-        # split: 当前节点计算的层
-        # next_layer: 下一个权重层
-        data, next_layer, split = calculate_output(model, data, start_layer)
-
-        # 获取下一个接收节点的地址，并建立通信
-        next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
-        node.connect(next_client, get_client_app_port(next_client, model_name))
-
-        # 准备发送的消息内容，可能需要包含标签
-        msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
-        print(
-            f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
-        )
-        node.send_message(node.sock, msg)
 
 
 def start_inference():

@@ -56,60 +56,6 @@ def calculate_accuracy(fx, y):
     return acc
 
 
-def node_inference(node, model):
-    """
-    节点推理的主要逻辑。它接收来自其他节点的数据和信息，计算输出，然后将结果发送给下一个节点。如果是最后一层，它会计算损失。
-    :param node:
-    :param model:
-    :return:
-    """
-    # 重新初始化节点
-    node.__init__(host_ip, host_port)
-    while True:
-        # 存储已发送的IP地址
-        next_clients = []
-        # 迭代次数 N为数据总数，B为批次大小
-        iterations = int(config.N / config.B)
-        # 等待连接
-        node_socket, node_addr = node.wait_for_connection()
-        # 迭代处理每一批数据
-        for i in range(iterations):
-            logging.info(f"node_{host_ip} 获取来自 node{node_addr} 的连接")
-            msg = node.receive_message(node_socket)
-            logging.info("msg: %s", msg)
-            # 解包消息内容
-            data, target, start_layer, split_layer, layer_node = msg
-            # 计算输出
-            data, next_layer, split = calculate_output(model, data, start_layer)
-            # 如果不是最后一层就,继续向下一个节点发送数据
-            if split + 1 < model_len:
-                # 获取下一个节点的IP
-                next_client = config.CLIENTS_LIST[layer_node[split + 1]]
-                if next_client not in next_clients:
-                    # 添加到发送列表
-                    node.connect(next_client, get_client_app_port(next_client, model_name))
-                next_clients.append(next_client)
-                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
-                node.send_message(node.sock, msg)
-                print(
-                    f"node_{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
-                )
-            else:
-                # 到达最后一层，计算损失和准确率
-                loss = F.cross_entropy(data, target)
-                acc = calculate_accuracy(data, target)
-                loss_list.append(loss)
-                acc_list.append(acc)
-                print("loss :{:.4f}".format(sum(loss_list) / len(loss_list)))
-                print("acc :{:.4f}%".format(100 * sum(acc_list) / len(acc_list)))
-                print("")
-
-        # 关闭socket连接
-        node_socket.close()
-        # 重新初始化节点
-        node.__init__(host_ip, host_port)
-
-
 def get_model(model, layer_type, in_channels, out_channels, kernel_size, start_layer):
     """
      获取当前节点需要计算的模型层
@@ -202,6 +148,60 @@ def calculate_output(model, data, start_layer):
         split = start_layer  # 或者根据需要设置其他默认值
 
     return data, next_layer, split
+
+
+def node_inference(node, model):
+    """
+    节点推理的主要逻辑。它接收来自其他节点的数据和信息，计算输出，然后将结果发送给下一个节点。如果是最后一层，它会计算损失。
+    :param node:
+    :param model:
+    :return:
+    """
+    # 重新初始化节点
+    node.__init__(host_ip, host_port)
+    while True:
+        # 存储已发送的IP地址
+        next_clients = []
+        # 迭代次数 N为数据总数，B为批次大小
+        iterations = int(config.N / config.B)
+        # 等待连接
+        node_socket, node_addr = node.wait_for_connection()
+        # 迭代处理每一批数据
+        for i in range(iterations):
+            logging.info(f"node_{host_ip} 获取来自 node{node_addr} 的连接")
+            msg = node.receive_message(node_socket)
+            logging.info("msg: %s", msg)
+            # 解包消息内容
+            data, target, start_layer, split_layer, layer_node = msg
+            # 计算输出
+            data, next_layer, split = calculate_output(model, data, start_layer)
+            # 如果不是最后一层就,继续向下一个节点发送数据
+            if split + 1 < model_len:
+                # 获取下一个节点的IP
+                next_client = config.CLIENTS_LIST[layer_node[split + 1]]
+                if next_client not in next_clients:
+                    # 添加到发送列表
+                    node.connect(next_client, get_client_app_port(next_client, model_name))
+                next_clients.append(next_client)
+                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
+                node.send_message(node.sock, msg)
+                print(
+                    f"node_{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
+                )
+            else:
+                # 到达最后一层，计算损失和准确率
+                loss = F.cross_entropy(data, target)
+                acc = calculate_accuracy(data, target)
+                loss_list.append(loss)
+                acc_list.append(acc)
+                print("loss :{:.4f}".format(sum(loss_list) / len(loss_list)))
+                print("acc :{:.4f}%".format(100 * sum(acc_list) / len(acc_list)))
+                print("")
+
+        # 关闭socket连接
+        node_socket.close()
+        # 重新初始化节点
+        node.__init__(host_ip, host_port)
 
 
 def start_inference():

@@ -1,157 +1,200 @@
-# ip及对应节点位序
-from communicator import Communicator
 import torch
-from models.vgg.vgg import VGG
-from torchvision import datasets, transforms
+from torch import nn
+import torch.nn.functional as F
+import logging
 from torch.utils.data import DataLoader
-import torch.nn as nn
-import socket
-import time
-from models.model_struct import model_cfg
+from torchvision import datasets, transforms
 import config
+from node_end import NodeEnd
+from models.vgg.vgg import VGG
+from models.model_struct import model_cfg
+from utils.utils import get_client_app_port
 
-# 在每个节点上计算的第k层
-split_layer = {0: [0, 1], 1: [2, 3], 2: [4, 5, 6]}
-reverse_split_layer = {0: 0, 1: 0, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2}
-
-host_port = 1998
-host_node_num = 1
-host_ip = config.CLIENTS_LIST[host_node_num]
-
-info = "MSG_FROM_NODE(%d), host= %s" % (host_node_num, host_ip)
-
-loss_list = []
-
-model_name = "VGG5"
-
-model_len = len(model_cfg[model_name])
-
-N = 10000 # data length
-B = 256 # Batch size
-### 假设本节点为节点1
-class node_end(Communicator):
-    def __init__(self,host_ip,host_port):
-        super(node_end, self).__init__(host_ip,host_port)
-
-    def add_addr(self, node_addr, node_port):
-        while True:
-            try:
-                #socket.error:  [Errno 106] Transport endpoint is already connected
-                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.sock.connect((node_addr, node_port))
-                break  # If the connection is successful, break the loop
-            except socket.error as e:
-                print("socket.error: ",e)
-                print(f"Failed to connect to {node_addr}:{node_port}, retrying...")
-                time.sleep(1)  # Wait for a while before retrying
-
-# TODO:理解这个函数
 def calculate_accuracy(fx, y):
-    preds = fx.max(1, keepdim=True)[1]
-    #print("preds={}, y.view_as(preds)={}".format(preds, y.view_as(preds)))
-    correct = preds.eq(y.view_as(preds)).sum()
-    acc = 100.00 * correct.float() / preds.shape[0]
+    """
+    计算模型输出与真实标签之间的准确率
+
+    参数:
+    fx (Tensor): 模型输出
+    y (Tensor): 真实标签
+
+    返回值:
+    acc (float): 准确率(0-100)
+    """
+    # 计算预测值，fx是模型输出，y是真实标签
+    predictions = fx.max(1, keepdim=True)[1]
+    # 将预测值和真实标签转换为相同形状
+    correct = predictions.eq(y.view_as(predictions)).sum()
+    # 计算准确率，correct是预测正确的样本数量
+    acc = 100.00 * correct.float() / predictions.shape[0]
     return acc
 
-def node_inference(node, model):
 
-    while 1:
-        global split_layer, reverse_split_layer
-        last_send_ips = []
-        iteration = int(N / B)
-        node_socket, node_addr = node.wait_for_connection()
-        for i in range(iteration):
+def get_model(model, layer_type, in_channels, out_channels, kernel_size, start_layer):
+    """
+     获取当前节点需要计算的模型层
 
-            print(f"node{host_node_num} get connection from node{node_addr}")
-            msg = node.receive_message(node_socket)
-            # print(msg[0])
-            data = msg[1]
-            target = msg[2]
-            start_layer = msg[3]
-            split_layer = msg[4]
-            reverse_split_layer = msg[5]
-            data, next_layer, split = calculate_output(model, data, start_layer)
-            if split + 1 < model_len:
+     参数:
+     model (nn.Module): 模型
+     type (str): 层类型('M':池化层, 'D':全连接层, 'C':卷积层)
+     in_channels (int): 输入通道数
+     out_channels (int): 输出通道数
+     kernel_size (int): 卷积核大小
+     start_layer (int): 起始层索引
 
-                print("*"*100)
-                print(reverse_split_layer)
-                last_send_ip=config.CLIENTS_LIST[reverse_split_layer[split + 1]]
-                if last_send_ip not in last_send_ips:
-                    node.connect(last_send_ip, 1999)
-                last_send_ips.append(last_send_ip)
-                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, reverse_split_layer]
-                node.send_message(node.sock, msg)
-                print(
-                    f"node{host_node_num} send msg to node{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
-                )
-            else:
-                # 到达最后一层，计算损失
-                loss = torch.nn.functional.cross_entropy(data, target)
-                loss_list.append(loss)
-                print("loss :{}".format(sum(loss_list) / len(loss_list)))
-        node_socket.close()
-        node.__init__(host_ip, host_port)
-
-
-def get_model(model, type, in_channels, out_channels, kernel_size, start_layer):
-    # for name, module in models.named_children():
-    #   print(f"Name: {name} | Module: {module}")
-    # print(models)
-    feature_s = []
-    dense_s = []
-    if type == "M":
-        feature_s.append(model.features[start_layer])
+     返回值:
+     feature_seq (nn.Sequential): 卷积层和池化层
+     dense_s (nn.Sequential): 全连接层
+     next_layer (int): 下一层索引
+     """
+    # 存储特征层（卷积层或池化层）的序列
+    feature_seq = []
+    # 存储全连接层的序列
+    dense_seq = []
+    # 根据层的类型添加对应的层到序列中
+    if layer_type == "M":
+        # 如果是池化层，增加到特征层序列中
+        feature_seq.append(model.features[start_layer])
         start_layer += 1
-    if type == "D":
-        dense_s.append(model.denses[start_layer-11])
+    elif layer_type == "D":
+        # 如果是全连接层，增加到全连接层序列中
+        dense_seq.append(model.denses[start_layer - 11])
         start_layer += 1
-    if type == "C":
-        for i in range(3):
-            feature_s.append(model.features[start_layer])
+    elif layer_type == "C":
+        # 如果是卷积层，增加连续三个卷积层到特征层序列中
+        for _ in range(3):
+            feature_seq.append(model.features[start_layer])
             start_layer += 1
+    # 更新下一层的起始索引
     next_layer = start_layer
-    return nn.Sequential(*feature_s), nn.Sequential(*dense_s), next_layer
+    # 创建特征层和全连接层的 Sequential 容器
+    return nn.Sequential(*feature_seq), nn.Sequential(*dense_seq), next_layer
 
 
 def calculate_output(model, data, start_layer):
-    for split in split_layer[host_node_num]:
-        # TODO:如果节点上的层不相邻，需要兼容
-        type = model_cfg[model_name][split][0]
-        in_channels = model_cfg[model_name][split][1]
-        out_channels = model_cfg[model_name][split][2]
-        kernel_size = model_cfg[model_name][split][3]
-        # print("type,in_channels,out_channels,kernel_size",type,in_channels,out_channels,kernel_size)
-        features, dense, next_layer = get_model(
-            model, type, in_channels, out_channels, kernel_size, start_layer
-        )
-        if len(features) > 0:
-            model_layer = features
-        else:
-            model_layer = dense
+    """
+    计算当前节点的输出
 
+    参数:
+    model (nn.Module): 模型
+    data (Tensor): 输入数据
+    start_layer (int): 起始层索引
+
+    返回值:
+    data (Tensor): 输出数据
+    next_layer (int): 下一层索引
+    split (int): 当前节点计算的最后一层索引
+    """
+
+    # 定义变量，并给予默认值
+    next_layer = start_layer
+    split = None
+
+    # 遍历当前主机节点上的层
+    for split in node_layer_indices[host_ip]:
+        # 如果节点上的层不相邻，需要实现层之间的兼容性
+        layer_type = model_cfg[model_name][split][0]  # 层的类型
+        in_channels = model_cfg[model_name][split][1]  # 输入通道数
+        out_channels = model_cfg[model_name][split][2]  # 输出通道数
+        kernel_size = model_cfg[model_name][split][3]  # 卷积核大小
+
+        # 获取模型的当前层
+        features, dense, next_layer = get_model(
+            model, layer_type, in_channels, out_channels, kernel_size, start_layer
+        )
+
+        # 选择特征层还是全连接层
+        model_layer = features if len(features) > 0 else dense
+
+        # 如果是全连接层，需要先将数据展平
+        if layer_type == "D":
+            data = data.view(data.size(0), -1)
+
+        # 将数据通过模型层进行前向传播
         data = model_layer(data)
+
+        # 更新下一层的起始层索引
         start_layer = next_layer
-        #print("next_layer", next_layer)
+
+    # 在循环结束后，确保split有一个合理的值
+    if split is None:
+        # 如果循环没有执行，设置split为合理的默认值
+        split = start_layer  # 或者根据需要设置其他默认值
+
     return data, next_layer, split
 
 
-def start_inference():
-    include_first = False
-    node = node_end(host_ip, host_port)
-    # 修改VGG的配置，模型载入改为逐层载入；或者是直接调用载入的模型就行？
-    # models= VGG('Unit', 'VGG5',split_layer[host_node_num] , model_cfg)
-    # models= VGG('Client', 'VGG5', len(model_cfg[model_name]), model_cfg)
+def node_inference(node, model):
+    """
+    节点推理的主要逻辑。它接收来自其他节点的数据和信息，计算输出，然后将结果发送给下一个节点。如果是最后一层，它会计算损失。
+    :param node:
+    :param model:
+    :return:
+    """
+    # 重新初始化节点
+    node.__init__(host_ip, host_port)
+    while True:
+        # 存储已发送的IP地址
+        next_clients = []
+        # 迭代次数 N为数据总数，B为批次大小
+        iterations = int(config.N / config.B)
+        # 等待连接
+        node_socket, node_addr = node.wait_for_connection()
+        # 迭代处理每一批数据
+        for i in range(iterations):
+            logging.info(f"node_{host_ip} 获取来自 node{node_addr} 的连接")
+            msg = node.receive_message(node_socket)
+            logging.info("msg: %s", msg)
+            # 解包消息内容
+            data, target, start_layer, split_layer, layer_node = msg
+            # 计算输出
+            data, next_layer, split = calculate_output(model, data, start_layer)
+            # 如果不是最后一层就,继续向下一个节点发送数据
+            if split + 1 < model_len:
+                # 获取下一个节点的IP
+                next_client = config.CLIENTS_LIST[layer_node[split + 1]]
+                if next_client not in next_clients:
+                    # 添加到发送列表
+                    node.connect(next_client, get_client_app_port(next_client, model_name))
+                next_clients.append(next_client)
+                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
+                node.send_message(node.sock, msg)
+                print(
+                    f"node_{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
+                )
+            else:
+                # 到达最后一层，计算损失和准确率
+                loss = F.cross_entropy(data, target)
+                acc = calculate_accuracy(data, target)
+                loss_list.append(loss)
+                acc_list.append(acc)
+                print("loss :{:.4f}".format(sum(loss_list) / len(loss_list)))
+                print("acc :{:.4f}%".format(100 * sum(acc_list) / len(acc_list)))
+                print("")
 
-    model = VGG("Client", model_name, 6, model_cfg[model_name])
+        # 关闭socket连接
+        node_socket.close()
+        # 重新初始化节点
+        node.__init__(host_ip, host_port)
+
+
+def start_inference():
+    """
+    整个推理过程的入口。
+    它初始化模型和节点连接，如果包含第一层，它会加载数据集并计算第一层的输出，然后将结果发送给下一个节点。
+    最后，它调用 node_inference 函数开始节点推理过程。
+    """
+    include_first = True
+    # 建立连接
+    node = NodeEnd(host_ip, host_port)
+
+    # 初始化模型并载入预训练权重
+    model = VGG("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg[model_name])
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
-    # moddel layer Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    # print("moddel layer",models)
-
     # 如果含第一层，载入数据
     if include_first:
-        # TODO:modify the data_dir
         start_layer = 0
         data_dir = "dataset"
         test_dataset = datasets.CIFAR10(
@@ -168,31 +211,43 @@ def start_inference():
         test_loader = DataLoader(
             test_dataset, batch_size=256, shuffle=False, num_workers=4
         )
-        # TODO:modify the port
-        last_send_ips=[]
+
+        # 存储已发送的IP地址
+        sent_clients = []
         for data, target in test_loader:
-            #print(len(data))
-            # split:当前节点计算的层
-            # next_layer:下一个权重层
+            # split: 当前节点计算的层
+            # next_layer: 下一个权重层
             data, next_layer, split = calculate_output(model, data, start_layer)
 
-            # TODO:modify the port
-            last_send_ip = config.CLIENTS_LIST[reverse_split_layer[split + 1]]
-            if last_send_ip not in last_send_ips:
-                node.add_addr(last_send_ip, 1999)
-            last_send_ips.append(last_send_ip)
-            # TODO:是否发送labels
-            msg = [info, data.cpu(), target.cpu(), next_layer,split_layer,reverse_split_layer]
+            # 获取下一个接收节点的地址，并建立通信
+            next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
+            if next_client not in sent_clients:
+                node.connect(next_client, get_client_app_port(next_client, model_name))
+            sent_clients.append(next_client)
+
+            # 准备发送的消息内容，可能需要包含标签
+            msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
             print(
-                f"node_{host_node_num} send msg to node_{config.CLIENTS_LIST[reverse_split_layer[split + 1]]}"
+                f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
             )
             node.send_message(node.sock, msg)
-            include_first = False
-            print('*'*40)
+        include_first = False
         node.sock.close()
     node_inference(node, model)
 
 
-# start_inference()
 if __name__ == '__main__':
+    host_ip = '192.168.215.130'
+    host_port = 9002
+
+    loss_list = []
+    acc_list = []
+
+    info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
+
+    model_name = ''
+    model_len = len(model_cfg[model_name])
+    node_layer_indices = []
+    layer_node_indices = []
+
     start_inference()

@@ -228,6 +228,8 @@ def start_inference():
     node_socket, node_addr = node.wait_for_connection()
     msg = node.receive_message(node_socket)
     if len(msg) == 3:
+        global node_layer_indices, layer_node_indices
+        _, node_layer_indices, layer_node_indices = msg
         from_first(model, node)
     else:
         node_inference(node, model)
@@ -249,7 +251,6 @@ if __name__ == '__main__':
 
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
 
-    node_layer_indices = {}
-    layer_node_indices = {}
+    node_layer_indices, layer_node_indices = {}, {}
 
     start_inference()

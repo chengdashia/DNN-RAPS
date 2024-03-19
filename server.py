@@ -33,16 +33,20 @@ def start():
     node = NodeEnd(host_ip, host_port)
     # 准备发送的消息内容
     msg = [info, layer_node_indices]
-
+    # 连接分层策略给的第一个节点
     node.connect(layer_node_indices[0], get_client_app_port(layer_node_indices[0], model_name))
+    # 发送信息
     node.send_message(node, msg)
+    # 关闭连接
+    node.sock.close()
 
 
 if __name__ == '__main__':
-
-    host_port = 9001
+    # 服务器的ip 端口
     host_ip = '192.168.215.129'
+    host_port = 9001
 
+    # 模型名称
     model_name = "VGG5"
 
     # 获取所有节点的资源情况

@@ -10,6 +10,7 @@ from models.vgg.vgg import VGG
 from models.model_struct import model_cfg
 from utils.utils import get_client_app_port
 
+
 def calculate_accuracy(fx, y):
     """
     计算模型输出与真实标签之间的准确率
@@ -134,8 +135,6 @@ def node_inference(node, model):
     # 重新初始化节点
     node.__init__(host_ip, host_port)
     while True:
-        # 存储已发送的IP地址
-        next_clients = []
         # 迭代次数 N为数据总数，B为批次大小
         iterations = int(config.N / config.B)
         # 等待连接
@@ -146,18 +145,18 @@ def node_inference(node, model):
             msg = node.receive_message(node_socket)
             logging.info("msg: %s", msg)
             # 解包消息内容
-            data, target, start_layer, split_layer, layer_node = msg
+            _, data, target, start_layer, node_layer, layer_node = msg
             # 计算输出
             data, next_layer, split = calculate_output(model, data, start_layer)
             # 如果不是最后一层就,继续向下一个节点发送数据
             if split + 1 < model_len:
                 # 获取下一个节点的IP
-                next_client = config.CLIENTS_LIST[layer_node[split + 1]]
-                if next_client not in next_clients:
-                    # 添加到发送列表
-                    node.connect(next_client, get_client_app_port(next_client, model_name))
-                next_clients.append(next_client)
-                msg = [info, data.cpu(), target.cpu(), next_layer, split_layer, layer_node]
+                next_client = layer_node[split + 1]
+                # 建立连接
+                node.connect(next_client, get_client_app_port(next_client, model_name))
+                # 封装要发送的数据
+                msg = [info, data.cpu(), target.cpu(), next_layer, node_layer, layer_node]
+                # 发送
                 node.send_message(node.sock, msg)
                 print(
                     f"node_{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
@@ -178,13 +177,46 @@ def node_inference(node, model):
         node.__init__(host_ip, host_port)
 
 
+def from_first(model, node):
+    start_layer = 0
+    data_dir = "dataset"
+    test_dataset = datasets.CIFAR10(
+        data_dir,
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        ),
+        download=True
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=256, shuffle=False, num_workers=4
+    )
+    for data, target in test_loader:
+        # split: 当前节点计算的层
+        # next_layer: 下一个权重层
+        data, next_layer, split = calculate_output(model, data, start_layer)
+
+        # 获取下一个接收节点的地址，并建立通信
+        next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
+        node.connect(next_client, get_client_app_port(next_client, model_name))
+
+        # 准备发送的消息内容，可能需要包含标签
+        msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
+        print(
+            f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
+        )
+        node.send_message(node.sock, msg)
+
+
 def start_inference():
     """
     整个推理过程的入口。
     它初始化模型和节点连接，如果包含第一层，它会加载数据集并计算第一层的输出，然后将结果发送给下一个节点。
     最后，它调用 node_inference 函数开始节点推理过程。
     """
-    include_first = True
     # 建立连接
     node = NodeEnd(host_ip, host_port)
 
@@ -193,61 +225,21 @@ def start_inference():
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
-    # 如果含第一层，载入数据
-    if include_first:
-        start_layer = 0
-        data_dir = "dataset"
-        test_dataset = datasets.CIFAR10(
-            data_dir,
-            train=False,
-            transform=transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-                ]
-            ),
-            download=True
-        )
-        test_loader = DataLoader(
-            test_dataset, batch_size=256, shuffle=False, num_workers=4
-        )
-
-        # 存储已发送的IP地址
-        sent_clients = []
-        for data, target in test_loader:
-            # split: 当前节点计算的层
-            # next_layer: 下一个权重层
-            data, next_layer, split = calculate_output(model, data, start_layer)
-
-            # 获取下一个接收节点的地址，并建立通信
-            next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
-            if next_client not in sent_clients:
-                node.connect(next_client, get_client_app_port(next_client, model_name))
-            sent_clients.append(next_client)
-
-            # 准备发送的消息内容，可能需要包含标签
-            msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
-            print(
-                f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
-            )
-            node.send_message(node.sock, msg)
-        include_first = False
-        node.sock.close()
     node_inference(node, model)
 
 
 if __name__ == '__main__':
     host_ip = '192.168.215.130'
-    host_port = 9002
+    host_port = 9001
 
     loss_list = []
     acc_list = []
 
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
 
-    model_name = ''
+    model_name = 'VGG'
     model_len = len(model_cfg[model_name])
-    node_layer_indices = []
-    layer_node_indices = []
+    node_layer_indices = {}
+    layer_node_indices = {}
 
     start_inference()

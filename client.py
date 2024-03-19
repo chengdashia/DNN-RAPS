@@ -217,28 +217,38 @@ def start_inference():
     它初始化模型和节点连接，如果包含第一层，它会加载数据集并计算第一层的输出，然后将结果发送给下一个节点。
     最后，它调用 node_inference 函数开始节点推理过程。
     """
-    # 建立连接
-    node = NodeEnd(host_ip, host_port)
-
     # 初始化模型并载入预训练权重
     model = VGG("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg[model_name])
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
-    node_inference(node, model)
+    # 建立连接
+    node = NodeEnd(host_ip, host_port)
+    # 接收数据
+    node_socket, node_addr = node.wait_for_connection()
+    msg = node.receive_message(node_socket)
+    if len(msg) == 3:
+        from_first(model, node)
+    else:
+        node_inference(node, model)
 
 
 if __name__ == '__main__':
+    # 本机的ip 端口
     host_ip = '192.168.215.130'
     host_port = 9001
 
+    # 模型名称
+    model_name = 'VGG5'
+    model_len = len(model_cfg[model_name])
+
+    # 损失列表
     loss_list = []
+    # 准确率列表
     acc_list = []
 
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
 
-    model_name = 'VGG5'
-    model_len = len(model_cfg[model_name])
     node_layer_indices = {}
     layer_node_indices = {}
 

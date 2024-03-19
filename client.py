@@ -237,7 +237,7 @@ if __name__ == '__main__':
 
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
 
-    model_name = 'VGG'
+    model_name = 'VGG5'
     model_len = len(model_cfg[model_name])
     node_layer_indices = {}
     layer_node_indices = {}

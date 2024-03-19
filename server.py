@@ -28,7 +28,7 @@ def convert_node_layer_indices(node_to_layer):
     return layer_node_mapping
 
 
-def start_inference():
+def start():
     # 建立连接
     node = NodeEnd(host_ip, host_port)
     # 准备发送的消息内容
@@ -75,4 +75,4 @@ if __name__ == '__main__':
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
 
     # 开始
-    start_inference()
+    start()

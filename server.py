@@ -32,7 +32,7 @@ def start():
     # 建立连接
     node = NodeEnd(host_ip, host_port)
     # 准备发送的消息内容
-    msg = [info, layer_node_indices]
+    msg = [info, node_layer_indices, layer_node_indices]
     # 连接分层策略给的第一个节点
     node.connect(layer_node_indices[0], get_client_app_port(layer_node_indices[0], model_name))
     # 发送信息

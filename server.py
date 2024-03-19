@@ -270,9 +270,10 @@ if __name__ == '__main__':
     # 获取所有节点的资源情况
     nodes_resource_infos = get_all_server_info()
 
-    # 根据不同的分割策略
+    # 分割策略类
     segmentation_strategy = NetworkSegmentationStrategy(model_name, model_cfg)
 
+    # 利用所有节点的资源情况的资源感知分割点方法进行分割
     # segmentation_points:  [2, 4]
     # node_layer_indices:  {'192.168.215.130': [0, 1], '192.168.215.131': [2, 3], '192.168.215.129': [4, 5, 6]}
     segmentation_points, node_layer_indices = (segmentation_strategy
@@ -281,6 +282,7 @@ if __name__ == '__main__':
     print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
     print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
 
+    # 将节点层索引字典转换为层节点映射字典
     # layer_node_indices:   {
     # 0: '192.168.215.130',
     # 1: '192.168.215.130',

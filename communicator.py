@@ -1,5 +1,6 @@
 # Communicator Object
-import json
+import pickle
+import time
 import struct
 import socket
 import logging
@@ -23,10 +24,6 @@ class Communicator(object):
 			raise
 		logger.info(f"host_ip:{host_ip}, host_port:{host_port}")
 
-	def __del__(self):
-		# 关闭socket连接
-		self.sock.close()
-
 	def wait_for_connection(self):
 		"""
 		监听并接受客户端连接
@@ -47,11 +44,11 @@ class Communicator(object):
 		"""
 		try:
 			# 将消息序列化
-			msg_json = json.dumps(msg)
+			msg_pickle = pickle.dumps(msg)
 			# 首先发送json字符串的长度
-			sock.sendall(struct.pack(">I", len(msg_json)))
+			sock.sendall(struct.pack(">I", len(msg_pickle)))
 			# 然后发送JSON字符串本身
-			sock.sendall(msg_json.encode('utf-8'))
+			sock.sendall(msg_pickle)
 			# 记录发送日志
 			logger.debug(f'{msg[0]} sent to {sock.getpeername()[0]}:{sock.getpeername()[1]}')
 		except socket.error as e:
@@ -61,23 +58,47 @@ class Communicator(object):
 		"""
 		接收消息
 		"""
-		try:
-			# 收到消息长度信息后，接收相应长度的消息内容
-			msg_len = struct.unpack(">I", sock.recv(4))[0]
-			# 接收完整消息
-			msg = sock.recv(msg_len, socket.MSG_WAITALL).decode('utf-8')
-			# 反序列化消息
-			msg = json.loads(msg)
-			# 记录接收日志
-			logger.debug(msg[0]+'received from'+str(sock.getpeername()[0])+':'+str(sock.getpeername()[1]))
+		# 收到消息长度信息后，接收相应长度的消息内容
+		msg_len = struct.unpack(">I", sock.recv(4))[0]
+		# 接收完整消息
+		msg = sock.recv(msg_len, socket.MSG_WAITALL)
+		# 反序列化消息
+		msg = pickle.loads(msg)
+		# 记录接收日志
+		logger.debug(msg[0]+'received from'+str(sock.getpeername()[0])+':'+str(sock.getpeername()[1]))
 
-			# 根据预期的消息类型进行校验
-			if expect_msg_type is not None:
-				if msg[0] == 'Finish':
-					return msg
-				elif msg[0] != expect_msg_type:
-					raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
-			return msg
-		except Exception as e:
-			logger.error(f'Error receiving message: {e}')
-			return None
+		# 根据预期的消息类型进行校验
+		# if expect_msg_type is not None:
+		# 	if msg[0] == 'Finish':
+		# 		return msg
+		# 	elif msg[0] != expect_msg_type:
+		# 		raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
+		return msg
+
+
+class NodeEnd(Communicator):
+	def __init__(self, ip, port):
+		# 调用父类communicator的构造函数来初始化
+		super(NodeEnd, self).__init__(ip, port)
+
+	def node_connect(self, node_ip, node_port, max_retries=10):
+		# 尝试连接的次数
+		attempts = 0
+		while attempts < max_retries:
+			try:
+				# 尝试创建到下一个节点的连接
+				self.sock.connect((node_ip, node_port), )
+				# 如果连接成功，则跳出循环
+				print(f"已成功连接到{node_ip}:{node_port}")
+				# If the connection is successful, break the loop
+				break
+			except socket.error as e:
+				# 如果连接失败，打印错误消息并重试
+				print(f"连接到{node_ip}:{node_port}失败，正在重试...错误：{e}")
+				# 等待一段时间再次尝试
+				time.sleep(1)
+				# 增加尝试连接的次数
+				attempts += 1
+		if attempts == max_retries:
+			# 如果达到最大重试次数，则抛出异常
+			raise Exception(f"无法连接到{node_ip}:{node_port}， 已达到最大重试次数{max_retries}")

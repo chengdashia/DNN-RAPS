@@ -3,7 +3,7 @@
         1、根据客户端的资源使用情况。将模型文件进行分层
         ip及对应节点位序
 """
-from node_end import NodeEnd
+from communicator import NodeEnd
 from models.model_struct import model_cfg
 from utils.segment_strategy import NetworkSegmentationStrategy
 from utils.resource_utilization import get_all_server_info
@@ -34,7 +34,7 @@ def start():
     # 准备发送的消息内容
     msg = [info, node_layer_indices, layer_node_indices]
     # 连接分层策略给的第一个节点
-    node.connect(layer_node_indices[0], get_client_app_port(layer_node_indices[0], model_name))
+    node.node_connect(layer_node_indices[0], get_client_app_port(layer_node_indices[0], model_name))
     # 发送信息
     node.send_message(node, msg)
     # 关闭连接

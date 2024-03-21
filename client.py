@@ -5,7 +5,7 @@ import logging
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import config
-from node_end import NodeEnd
+from communicator import NodeEnd
 from models.vgg5.vgg5 import VGG5
 from models.model_struct import model_cfg
 from utils.utils import get_client_app_port
@@ -149,7 +149,7 @@ def from_first(model, node):
 
         # 获取下一个接收节点的地址，并建立通信
         next_client = config.CLIENTS_LIST[layer_node_indices[split + 1]]
-        node.connect(next_client, get_client_app_port(next_client, model_name))
+        node.node_connect(next_client, get_client_app_port(next_client, model_name))
 
         # 准备发送的消息内容，可能需要包含标签
         msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
@@ -187,7 +187,7 @@ def node_inference(node, model):
                 # 获取下一个节点的IP
                 next_client = layer_node[split + 1]
                 # 建立连接
-                node.connect(next_client, get_client_app_port(next_client, model_name))
+                node.node_connect(next_client, get_client_app_port(next_client, model_name))
                 # 封装要发送的数据
                 msg = [info, data.cpu(), target.cpu(), next_layer, node_layer, layer_node]
                 # 发送

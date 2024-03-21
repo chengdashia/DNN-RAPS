@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import config
 from node_end import NodeEnd
-from models.vgg.vgg import VGG
+from models.vgg5.vgg5 import VGG5
 from models.model_struct import model_cfg
 from utils.utils import get_client_app_port
 
@@ -218,7 +218,7 @@ def start_inference():
     最后，它调用 node_inference 函数开始节点推理过程。
     """
     # 初始化模型并载入预训练权重
-    model = VGG("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg[model_name])
+    model = VGG5("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg[model_name])
     model.eval()
     model.load_state_dict(torch.load("models/vgg/vgg.pth"))
 
@@ -249,8 +249,9 @@ if __name__ == '__main__':
     # 准确率列表
     acc_list = []
 
-    info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
+    info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_port)
 
     node_layer_indices, layer_node_indices = {}, {}
 
     start_inference()
+    

@@ -76,7 +76,7 @@ if __name__ == '__main__':
     #   }
     layer_node_indices = convert_node_layer_indices(node_layer_indices)
 
-    info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_ip)
+    info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_port)
 
     # 开始
     start()

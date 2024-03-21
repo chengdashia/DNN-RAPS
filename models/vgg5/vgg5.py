@@ -1,10 +1,10 @@
 import torch.nn as nn
 
 
-# Build the VGG models according to location and split_layer
-class VGG(nn.Module):
+# Build the VGG5 models according to location and split_layer
+class VGG5(nn.Module):
 	def __init__(self, location, vgg_name, split_layer, cfg):
-		super(VGG, self).__init__()
+		super(VGG5, self).__init__()
 		assert split_layer < len(cfg[vgg_name])
 		self.split_layer = split_layer
 		self.location = location

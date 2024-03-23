@@ -154,7 +154,7 @@ def from_first(model, node):
         # 准备发送的消息内容，可能需要包含标签
         msg = [info, data.cpu(), target.cpu(), next_layer, node_layer_indices, layer_node_indices]
         print(
-            f"node{host_ip} send msg to node{config.CLIENTS_LIST[layer_node_indices[split + 1]]}"
+            f"node{host_ip} send msg to node{layer_node_indices[split + 1]}"
         )
         node.send_message(node.sock, msg)
 
@@ -193,7 +193,7 @@ def node_inference(node, model):
                 # 发送
                 node.send_message(node.sock, msg)
                 print(
-                    f"node_{host_ip} send msg to node{config.CLIENTS_LIST[layer_node[split + 1]]}"
+                    f"node_{host_ip} send msg to node{layer_node[split + 1]}"
                 )
             else:
                 # 到达最后一层，计算损失和准确率

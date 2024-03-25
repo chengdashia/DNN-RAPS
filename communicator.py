@@ -56,24 +56,37 @@ class Communicator(object):
 
 	def receive_message(self, sock, expect_msg_type=None):
 		"""
-		接收消息
+		接收数据
+		:param sock:
+		:param expect_msg_type:
+		:return:
 		"""
-		# 收到消息长度信息后，接收相应长度的消息内容
-		msg_len = struct.unpack(">I", sock.recv(4))[0]
-		# 接收完整消息
-		msg = sock.recv(msg_len, socket.MSG_WAITALL)
-		# 反序列化消息
-		msg = pickle.loads(msg)
-		# 记录接收日志
-		logger.debug(msg[0]+'received from'+str(sock.getpeername()[0])+':'+str(sock.getpeername()[1]))
+		try:
+			# 接收消息长度信息
+			msg_len_bytes = sock.recv(4)
+			if len(msg_len_bytes) < 4:
+				# 如果接收到的长度信息不完整,表示连接已关闭
+				return None
+			msg_len = struct.unpack(">I", msg_len_bytes)[0]
 
-		# 根据预期的消息类型进行校验
-		# if expect_msg_type is not None:
-		# 	if msg[0] == 'Finish':
-		# 		return msg
-		# 	elif msg[0] != expect_msg_type:
-		# 		raise Exception("Expected " + expect_msg_type + " but received " + msg[0])
-		return msg
+			# 接收完整消息
+			msg_bytes = bytearray()
+			while len(msg_bytes) < msg_len:
+				chunk = sock.recv(msg_len - len(msg_bytes))
+				if not chunk:
+					# 如果接收到的数据为空,表示连接已关闭
+					return None
+				msg_bytes.extend(chunk)
+
+			# 反序列化消息
+			msg = pickle.loads(msg_bytes)
+			# 记录接收日志
+			logger.debug(msg[0] + 'received from' + str(sock.getpeername()[0]) + ':' + str(sock.getpeername()[1]))
+			return msg
+		except (socket.error, struct.error) as e:
+			# 处理连接关闭或数据不完整的情况
+			logger.error(f"Error receiving message: {e}")
+			return None
 
 
 class NodeEnd(Communicator):

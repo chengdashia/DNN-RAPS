@@ -2,7 +2,7 @@
     网络分割策略
 """
 import random
-from config import CLIENTS_NUMBERS
+import config
 
 
 # 网络分割策略类
@@ -25,7 +25,7 @@ class NetworkSegmentationStrategy:
         Automatically selects segmentation points for the network.
         :return: List of segmentation indices
         """
-        num_split_points = CLIENTS_NUMBERS - 1
+        num_split_points = len(config.server_list) - 1
 
         total_layers = len(self.model_cfg[self.model_name])
 
@@ -41,7 +41,7 @@ class NetworkSegmentationStrategy:
         :param resource_usage: 字典,包含每个节点的CPU、GPU、内存和网络利用率
         :return: 元组,包含分割点列表和节点层索引字典
         """
-        num_split_points = CLIENTS_NUMBERS - 1  # 计算分割点数量
+        num_split_points = len(config.server_list) - 1  # 计算分割点数量
         total_layers = len(self.model_cfg[self.model_name])  # 获取模型总层数
         eligible_layers = list(range(1, total_layers - 1))  # 获取可用于分割的层索引列表
 

@@ -45,9 +45,9 @@ class Communicator(object):
 		try:
 			# 将消息序列化
 			msg_pickle = pickle.dumps(msg)
-			# 首先发送json字符串的长度
+			# 首先发送字符串的长度
 			sock.sendall(struct.pack(">I", len(msg_pickle)))
-			# 然后发送JSON字符串本身
+			# 然后发送字符串本身
 			sock.sendall(msg_pickle)
 			# 记录发送日志
 			logger.debug(f'{msg[0]} sent to {sock.getpeername()[0]}:{sock.getpeername()[1]}')

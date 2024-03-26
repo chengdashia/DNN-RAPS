@@ -1,8 +1,6 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 import config
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
@@ -12,20 +10,33 @@ from utils.utils import get_client_app_port_by_name
 
 def get_next_client(current_client):
     """
-    根据当前客户端获取下一个客户端
-    :param current_client:
-    :return:
+    获取分割策略中的当前客户端的下一个客户端。
+
+    参数:
+    current_client (str): 当前客户端的名称。
+
+    返回值:
+    返回给定键的下一个键，如果没有下一个键或键不在字典中，则返回None。
     """
+    # 将字典的键转换为列表，以便可以按顺序访问
     keys = list(node_layer_indices.keys())
+
     try:
+        # 获取当前客户端键在列表中的索引位置
         current_client_index = keys.index(current_client)
+        # 计算下一个客户端键的索引位置
         next_client_index = current_client_index + 1
-        if next_client_index < len(keys):  # 确保不超出列表范围
+
+        # 检查下一个索引是否在列表的有效范围内
+        if next_client_index < len(keys):
+            # 返回列表中的下一个键
             return keys[next_client_index]
         else:
-            return None  # 当前键是最后一个键，没有下一个键
+            # 如果当前键是列表中的最后一个键，则没有后继键
+            return None
     except ValueError:
-        return None  # 当前键不在字典中
+        # 如果当前客户端键不在列表中，捕获ValueError异常
+        return None
 
 
 def get_model(model, layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number):
@@ -125,59 +136,19 @@ def calculate_output(model, data, cumulative_layer_number):
     return data, cumulative_layer_number
 
 
-def from_first(model, node):
-    print("从第一层开始")
-    data_dir = "../../dataset"
-    test_dataset = datasets.CIFAR10(
-        data_dir,
-        train=False,
-        transform=transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-            ]
-        ),
-        download=True
-    )
-    test_loader = DataLoader(
-        test_dataset, batch_size=256, shuffle=False, num_workers=4
-    )
-
-    # 创建一个新的连接来连接下一个客户端
-    node.__init__(host_ip, host_port)
-    start_layer = 0
-    cumulative_layer_number = 0
-    for data, target in test_loader:
-        # 获取推理后的结果
-        inferred_data, cumulative_layer_number = calculate_output(model, data, start_layer)
-        data_cpu_list.append(inferred_data.cpu())
-        target_cpu_list.append(target.cpu())
-    # 获取下一个接收节点的地址，并建立通信
-    next_client = get_next_client(current_client_name)
-    # 如果不是最后一个客户端
-    if next_client:
-        next_ip, next_port = get_client_app_port_by_name(next_client, model_name)
-        print("next_ip(%s), next_port= %s" % (next_ip, next_port))
-        node.node_connect(next_ip, next_port)
-        # 将处理后的数据发送给下一个客户端
-        # 准备发送的消息内容，可能需要包含标签
-        msg = [info, node_layer_indices, data_cpu_list, target_cpu_list, cumulative_layer_number]
-        node.send_message(node.sock, msg)
-        print(f"客户端{host_ip}:{host_port}将处理后的消息发送到客户端{next_ip}:{next_port}")
-
-        # 关闭与下一个客户端的连接
-        node.sock.close()
-    # 如果是最后一个客户端，则计算结果，推理结束
-    else:
-        print("推理结束")
-
-
 def node_inference(model, node, msg):
-    print("持续推理")
-    global info, node_layer_indices, data_cpu_list, target_cpu_list
+    """
+    开始当前节点的推理
+
+    参数:
+    model (nn.Module): 模型
+    node (socket): socket 端点
+    msg (list): 从上一个客户端接收的数据
+    """
+    print("*********************开始推理************************")
+    global info, node_layer_indices, data_cpu_list, target_list
     info, node_layer_indices, data_cpu_list, target_cpu_list, cumulative_layer_number = msg
     print(info)
-
     # 迭代次数 N为数据总数，B为批次大小
     iterations = int(config.N / config.B)
     # 迭代处理每一批数据
@@ -236,25 +207,20 @@ def start():
     model.eval()
     model.load_state_dict(torch.load("../../models/vgg5/vgg5.pth"))
 
-    if len(msg) == 2:
-        global info, node_layer_indices
-        info, node_layer_indices = msg
-        print(info)
-        from_first(model, node)
-    else:
-        node_inference(model, node, msg)
+    node_inference(model, node, msg)
 
 
 if __name__ == '__main__':
-    current_client_name = 'client3'
+    current_client_name = 'client1'
     model_name = 'VGG5'
 
+    # 获取当前客户端的ip和端口
     host_ip, host_port = get_client_app_port_by_name(current_client_name, model_name)
     print(host_ip, host_port)
 
     info = ''
     node_layer_indices = {}
-    data_cpu_list, target_cpu_list = [], []
+    data_cpu_list, target_list = [], []
     # 损失列表
     loss_list = []
     # 准确率列表

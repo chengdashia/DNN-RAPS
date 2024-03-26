@@ -3,40 +3,63 @@
         1、根据客户端的资源使用情况。将模型文件进行分层
         ip及对应节点位序
 """
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 from communicator import NodeEnd
 from models.model_struct import model_cfg
 from utils.segment_strategy import NetworkSegmentationStrategy
 from utils.resource_utilization import get_all_server_info
 from utils.utils import get_client_app_port
+from config import dataset_config, B
 
 
-def convert_node_layer_indices(node_to_layer):
+def prepare_data():
     """
-    将节点层索引字典转换为层节点映射字典
-    :param node_to_layer: 节点层索引字典,键为节点IP,值为该节点对应的层索引列表
-    :return: 层节点映射字典,键为层索引,值为对应的节点IP
+    加载数据
+    :return:
     """
-    # 初始化层节点映射字典
-    layer_node_mapping = {}
+    data_dir = dataset_config.get(model_name)
+    test_dataset = datasets.CIFAR10(
+        data_dir,
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        ),
+        download=True
+    )
 
-    # 遍历节点层索引字典中的每个节点
-    for node_ip, layer_indices in node_to_layer.items():
-        # 遍历该节点对应的层索引列表
-        for layer_idx in layer_indices:
-            # 将层索引和对应的节点IP添加到层节点映射字典
-            layer_node_mapping[layer_idx] = node_ip
-    return layer_node_mapping
+    test_loader = DataLoader(
+        test_dataset, batch_size=B, shuffle=False, num_workers=4
+    )
+    data_cpu_list, target_cpu_list = [], []
+    for data, target in test_loader:
+        data_cpu_list.append(data)
+        target_cpu_list.append(target)
+    return data_cpu_list, target_cpu_list
 
 
 def start():
     # 建立连接
     node = NodeEnd(host_ip, host_port)
+
+    # 获取第一个客户端的地址
+    first_client_ip = list(node_layer_indices.keys())[0]
+    first_client_port = get_client_app_port(first_client_ip, model_name)
+
+    # 连接分层策略给的第一个客户端
+    node.node_connect(first_client_ip, first_client_port)
+
     # 准备发送的消息内容
-    msg = [info, node_layer_indices, layer_node_indices]
-    # 连接分层策略给的第一个节点
-    node.node_connect(layer_node_indices[0], get_client_app_port(layer_node_indices[0], model_name))
+    cumulative_layer_number = 0
+    data_list, target_list = prepare_data()
+    msg = [info, node_layer_indices, data_list, target_list, cumulative_layer_number]
+
     # 发送信息
     node.send_message(node, msg)
+    print(f"服务端{host_ip}:{host_port}将数据发送到客户端{first_client_ip}:{first_client_port}")
     # 关闭连接
     node.sock.close()
 
@@ -63,18 +86,6 @@ if __name__ == '__main__':
     print('*' * 40)
     print("resource_aware_segmentation_points  segmentation_points: ", segmentation_points)
     print("resource_aware_segmentation_points  node_layer_indices: ", node_layer_indices)
-
-    # 将节点层索引字典转换为层节点映射字典
-    # layer_node_indices:   {
-    #           0: '192.168.215.130',
-    #           1: '192.168.215.130',
-    #           2: '192.168.215.129',
-    #           3: '192.168.215.129',
-    #           4: '192.168.215.131',
-    #           5: '192.168.215.131',
-    #           6: '192.168.215.131'
-    #   }
-    layer_node_indices = convert_node_layer_indices(node_layer_indices)
 
     info = "MSG_FROM_NODE_ADDRESS(%s), host= %s" % (host_ip, host_port)
 

@@ -5,10 +5,10 @@ import config
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
 from communicator import NodeEnd
-from utils.utils import get_client_app_port
+from utils.utils import get_client_app_port_by_name
 
 
-def get_next_client_ip(ip_addr):
+def get_next_client(current_client):
     """
     获取分割策略中的当前客户端的下一个客户端。
 
@@ -23,7 +23,7 @@ def get_next_client_ip(ip_addr):
 
     try:
         # 获取当前客户端键在列表中的索引位置
-        current_client_index = keys.index(ip_addr)
+        current_client_index = keys.index(current_client)
         # 计算下一个客户端键的索引位置
         next_client_index = current_client_index + 1
 
@@ -112,7 +112,7 @@ def calculate_output(model, data, cumulative_layer_number):
     cumulative_layer_number: 累计层数
     """
     # 遍历当前主机节点上的层
-    for index in node_layer_indices[host_ip]:
+    for index in node_layer_indices[current_client_name]:
         # 如果节点上的层不相邻，需要实现层之间的兼容性
         layer_type = model_cfg[model_name][index][0]  # 层的类型
         in_channels = model_cfg[model_name][index][1]  # 输入通道数
@@ -146,8 +146,8 @@ def node_inference(model, node, msg):
     msg (list): 从上一个客户端接收的数据
     """
     print("*********************开始推理************************")
-    global info, node_layer_indices, data_list, target_list
-    info, node_layer_indices, data_list, target_list, cumulative_layer_number = msg
+    global info, node_layer_indices, data_cpu_list, target_list
+    info, node_layer_indices, data_cpu_list, target_cpu_list, cumulative_layer_number = msg
     print(info)
     # 迭代次数 N为数据总数，B为批次大小
     iterations = int(config.N / config.B)
@@ -155,33 +155,33 @@ def node_inference(model, node, msg):
     result_list = []
     start_layer = cumulative_layer_number
     for i in range(iterations):
-        data = data_list[i]
+        data = data_cpu_list[i]
         # 获取推理后的结果
         result, cumulative_layer_number = calculate_output(model, data, start_layer)
         result_list.append(result)
     # 获取下一个客户端
-    next_client_ip = get_next_client_ip(host_ip)
+    next_client = get_next_client(current_client_name)
     # 如果不是最后一个客户端
-    if next_client_ip:
-        next_client_port = get_client_app_port(host_ip, model_name)
-        print("next_ip(%s), next_port= %s" % (next_client_ip, next_client_port))
+    if next_client:
+        next_ip, next_port = get_client_app_port_by_name(next_client, model_name)
+        print("next_ip(%s), next_port= %s" % (next_ip, next_port))
 
         # 创建一个新的连接来连接下一个客户端
         node.__init__(host_ip, host_port)
-        node.node_connect(next_client_ip, next_client_ip)
+        node.node_connect(next_ip, next_port)
 
         # 将处理后的数据发送给下一个客户端
-        msg = [info, node_layer_indices, result_list, target_list, cumulative_layer_number]
+        msg = [info, node_layer_indices, result_list, target_cpu_list, cumulative_layer_number]
         node.send_message(node.sock, msg)
-        print(f"客户端{host_ip}:{host_port}将处理后的消息发送到客户端{next_client_ip}:{next_client_ip}")
+        print(f"客户端{host_ip}:{host_port}将处理后的消息发送到客户端{next_ip}:{next_port}")
 
         # 关闭与下一个客户端的连接
         node.sock.close()
     # 如果是最后一个客户端，则计算结果，推理结束
     else:
         for i in range(iterations):
-            loss = F.cross_entropy(result_list[i], target_list[i])
-            acc = calculate_accuracy(result_list[i], target_list[i])
+            loss = F.cross_entropy(result_list[i], target_cpu_list[i])
+            acc = calculate_accuracy(result_list[i], target_cpu_list[i])
             loss_list.append(loss)
             acc_list.append(acc)
         print("loss :{:.4}".format(sum(loss_list) / len(loss_list)))
@@ -205,20 +205,22 @@ def start():
     # 初始化模型并载入预训练权重
     model = VGG5("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg)
     model.eval()
-    model.load_state_dict(torch.load("models/vgg5/vgg5.pth"))
+    model.load_state_dict(torch.load("../../models/vgg5/vgg5.pth"))
 
     node_inference(model, node, msg)
 
 
 if __name__ == '__main__':
-    host_ip = "192.168.215.129"
-    host_port = 9001
+    current_client_name = 'client3'
     model_name = 'VGG5'
+
+    # 获取当前客户端的ip和端口
+    host_ip, host_port = get_client_app_port_by_name(current_client_name, model_name)
+    print(host_ip, host_port)
 
     info = ''
     node_layer_indices = {}
-    data_list, target_list = [], []
-
+    data_cpu_list, target_list = [], []
     # 损失列表
     loss_list = []
     # 准确率列表

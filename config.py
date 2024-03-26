@@ -1,6 +1,7 @@
 """
  配置相关
 """
+# 本地服务器配置
 local_server_list = [
     {
         "name": "client1",
@@ -30,6 +31,7 @@ local_server_list = [
         }
     }
 ]
+# 线上部署
 server_list = [
     {
         "ip": "192.168.215.129",
@@ -60,10 +62,10 @@ server_list = [
     }
     # 添加更多服务器
 ]
-CLIENTS_CONFIG = {server["ip"]: i for i, server in enumerate(server_list)}
-CLIENTS_LIST = [server["ip"] for server in server_list]
-CLIENTS_NUMBERS = len(CLIENTS_LIST)
-
+dataset_config = {
+    'VGG5': "dataset",
+    'VGG6': ""
+}
 # data length
 N = 10000
 # Batch size

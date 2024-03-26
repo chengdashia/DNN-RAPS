@@ -1,5 +1,5 @@
-from communicator import NodeEnd
-from utils.utils import get_client_app_port_by_name
+from socket.communicator import NodeEnd
+from utils import get_client_app_port_by_name
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from config import dataset_config, B

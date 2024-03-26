@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import config
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
-from communicator import NodeEnd
-from utils.utils import get_client_app_port_by_name
+from socket.communicator import NodeEnd
+from utils import get_client_app_port_by_name
 
 
 def get_next_client(current_client):

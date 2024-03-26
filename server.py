@@ -5,11 +5,11 @@
 """
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from communicator import NodeEnd
+from socket.communicator import NodeEnd
 from models.model_struct import model_cfg
-from utils.segment_strategy import NetworkSegmentationStrategy
-from utils.resource_utilization import get_all_server_info
-from utils.utils import get_client_app_port
+from segment_strategy import NetworkSegmentationStrategy
+from resource_utilization import get_all_server_info
+from utils import get_client_app_port
 from config import dataset_config, B
 
 

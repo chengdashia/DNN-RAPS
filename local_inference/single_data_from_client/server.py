@@ -1,4 +1,4 @@
-from socket.communicator import NodeEnd
+from communication.communicator import NodeEnd
 from utils import get_client_app_port_by_name
 
 

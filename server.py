@@ -5,7 +5,7 @@
 """
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from socket.communicator import NodeEnd
+from communication.communicator import NodeEnd
 from models.model_struct import model_cfg
 from strategy.segment_strategy import NetworkSegmentationStrategy
 from strategy.resource_utilization import get_all_server_info

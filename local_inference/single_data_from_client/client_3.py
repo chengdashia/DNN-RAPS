@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 import config
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
-from socket.communicator import NodeEnd
+from communication.communicator import NodeEnd
 from utils import get_client_app_port_by_name
 
 

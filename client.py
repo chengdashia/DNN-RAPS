@@ -56,6 +56,8 @@ def get_model(model, layer_type, in_channels, out_channels, kernel_size, cumulat
      dense_s (nn.Sequential): 全连接层
      next_layer (int): 下一层索引
      """
+    print("layer_type: ", layer_type)
+    print("cumulative_layer_number: ", cumulative_layer_number)
     # 存储特征层（卷积层或池化层）的序列
     feature_seq = []
     # 存储全连接层的序列
@@ -168,12 +170,12 @@ def node_inference(model, node, msg):
 
         # 创建一个新的连接来连接下一个客户端
         node.__init__(host_ip, host_port)
-        node.node_connect(next_client_ip, next_client_ip)
+        node.node_connect(next_client_ip, next_client_port)
 
         # 将处理后的数据发送给下一个客户端
         msg = [info, node_layer_indices, result_list, target_list, cumulative_layer_number]
         node.send_message(node.sock, msg)
-        print(f"客户端{host_ip}:{host_port}将处理后的消息发送到客户端{next_client_ip}:{next_client_ip}")
+        print(f"客户端{host_ip}:{host_port}将处理后的消息发送到客户端{next_client_ip}:{next_client_port}")
 
         # 关闭与下一个客户端的连接
         node.sock.close()
@@ -191,7 +193,7 @@ def node_inference(model, node, msg):
 
 def start():
     # 建立连接
-    node = NodeEnd(host_ip, host_port)
+    node = NodeEnd(docker_host_ip, host_port)
 
     # 等待上一个客户端的连接
     connect_socket, _ = node.wait_for_connection()
@@ -211,7 +213,11 @@ def start():
 
 
 if __name__ == '__main__':
-    host_ip = "192.168.215.129"
+    # docker 容器中
+    docker_host_ip = '0.0.0.0'
+
+    # 客户端本机ip
+    host_ip = "192.168.215.133"
     host_port = 9001
     model_name = 'VGG5'
 

@@ -34,7 +34,7 @@ local_server_list = [
 # 线上部署
 server_list = [
     {
-        "ip": "192.168.215.129",
+        "ip": "192.168.215.133",
         "username": "root",
         "password": "123456",
         "application": {
@@ -43,7 +43,7 @@ server_list = [
         }
     },
     {
-        "ip": "192.168.215.130",
+        "ip": "192.168.215.135",
         "username": "root",
         "password": "123456",
         "application": {
@@ -52,7 +52,7 @@ server_list = [
         }
     },
     {
-        "ip": "192.168.215.131",
+        "ip": "192.168.215.136",
         "username": "root",
         "password": "123456",
         "application": {

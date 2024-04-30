@@ -24,7 +24,7 @@ def prepare_data():
     )
 
     test_loader = DataLoader(
-        test_dataset, batch_size=B, shuffle=False, num_workers=4
+        test_dataset, batch_size=B, shuffle=False, num_workers=0
     )
     data_cpu_list, target_cpu_list = [], []
     for data, target in test_loader:
@@ -64,7 +64,7 @@ if __name__ == '__main__':
 
     model_name = 'VGG5'
 
-    node_layer_indices = {'client2': [0, 1], 'client1': [2, 3], 'client3': [4, 5, 6]}
+    node_layer_indices = {'client1': [0, 1], 'client2': [2, 3], 'client3': [4, 5, 6]}
 
     info = "MSG_FROM_NODE_ADDRESS(%s), port= %s" % (host_ip, host_port)
 

@@ -43,7 +43,7 @@ def prepare_data():
 
 def start():
     # 建立连接
-    node = NodeEnd(host_ip, host_port)
+    node = NodeEnd(docker_host_ip, host_port)
 
     # 获取第一个客户端的地址
     first_client_ip = list(node_layer_indices.keys())[0]
@@ -58,15 +58,18 @@ def start():
     msg = [info, node_layer_indices, data_list, target_list, cumulative_layer_number]
 
     # 发送信息
-    node.send_message(node, msg)
+    node.send_message(node.sock, msg)
     print(f"服务端{host_ip}:{host_port}将数据发送到客户端{first_client_ip}:{first_client_port}")
     # 关闭连接
     node.sock.close()
 
 
 if __name__ == '__main__':
+    # docker 容器中
+    docker_host_ip = '0.0.0.0'
+
     # 服务器的ip 端口
-    host_ip = '192.168.215.129'
+    host_ip = '192.168.215.132'
     host_port = 9001
 
     # 模型名称

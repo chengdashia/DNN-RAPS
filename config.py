@@ -1,6 +1,13 @@
+import sys
 """
  配置相关
 """
+
+# Network configration
+SERVER_ADDR = '192.168.110.35'
+SERVER_PORT = 51000
+
+
 # 本地服务器配置
 local_server_list = [
     {
@@ -37,6 +44,7 @@ server_list = [
         "ip": "192.168.215.133",
         "username": "root",
         "password": "123456",
+        "hostname": "client1",
         "application": {
             "VGG5": 9001,
             "VGG6": 9002
@@ -46,6 +54,7 @@ server_list = [
         "ip": "192.168.215.135",
         "username": "root",
         "password": "123456",
+        "hostname": "client2",
         "application": {
             "VGG5": 9001,
             "VGG6": 9002
@@ -55,6 +64,7 @@ server_list = [
         "ip": "192.168.215.136",
         "username": "root",
         "password": "123456",
+        "hostname": "client1",
         "application": {
             "VGG5": 9001,
             "VGG6": 9002
@@ -62,11 +72,49 @@ server_list = [
     }
     # 添加更多服务器
 ]
+CLIENTS_LIST = [server["ip"] for server in server_list]
 dataset_config = {
-    'VGG5': "dataset",
+    'VGG5': "vgg5",
     'VGG6': ""
 }
+# Dataset configration
+home = sys.path[0].split('SynerGist')[0] + 'FedAdapt'
+dataset_path = home + '/dataset/'
 # data length
 N = 10000
 # Batch size
 B = 256
+# Number of devices
+K = len(server_list)
+# Number of groups
+G = 3
+model_name = 'VGG5'
+model_size = 1.28
+model_flops = 32.902
+total_flops = 8488192
+# Initial split layers
+split_layer = [6, 6, 6, 6, 6]
+model_len = 7
+
+# FL training configration
+R = 100 # FL rounds
+LR = 0.01 # Learning rate
+BS = 100 # Batch size
+
+# RL training configration
+max_episodes = 100         # max training episodes
+max_timesteps = 100        # max timesteps in one episode
+exploration_times = 20	   # exploration times without std decay
+n_latent_var = 64          # number of variables in hidden layer
+action_std = 0.5           # constant std for action distribution (Multivariate Normal)
+update_timestep = 10       # update policy every n timesteps
+K_epochs = 50              # update policy for K epochs
+eps_clip = 0.2             # clip parameter for PPO
+rl_gamma = 0.9             # discount factor
+rl_b = 100				   # Batchsize
+rl_lr = 0.0003             # parameters for Adam optimizer
+rl_betas = (0.9, 0.999)
+iteration = {'192.168.215.129' : 5, '192.168.215.130' : 5, '192.168.215.131': 50, '192.168.215.132': 5, '192.168.215.133': 5}  # infer times for each device
+
+random = True
+random_seed = 0

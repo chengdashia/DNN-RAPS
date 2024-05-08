@@ -2,7 +2,7 @@ from communication.communicator import NodeEnd
 from utils import get_client_app_port_by_name
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from config import dataset_config, B
+from config import dataset_config, B, dataset_path
 
 
 def prepare_data():
@@ -10,7 +10,7 @@ def prepare_data():
     加载数据
     :return:
     """
-    data_dir = "../../" + dataset_config.get(model_name)
+    data_dir = dataset_path + dataset_config.get(model_name)
     test_dataset = datasets.CIFAR10(
         data_dir,
         train=False,

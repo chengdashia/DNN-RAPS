@@ -31,7 +31,7 @@ import PPO
 from models.model_struct import model_cfg
 
 # 设置日志格式，包括时间戳、日志记录器名称、日志级别和日志消息
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
 # 创建日志记录器对象
 logger = logging.getLogger(__name__)
 

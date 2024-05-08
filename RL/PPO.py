@@ -5,7 +5,8 @@ from torch.distributions import MultivariateNormal
 
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')  # 设置日志格式
+# 设置日志格式
+logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,10 +29,13 @@ class Memory:
         del self.is_terminals[:]  # 清空是否结束列表
 
 
-class ActorCritic(nn.Module):  # 定义ActorCritic类，继承nn.Module
+class ActorCritic(nn.Module):
+    """
+    ActorCritic类的构造函数,继承自nn.Module
+    """
     def __init__(self, state_dim, action_dim, action_std):
         super(ActorCritic, self).__init__()  # 调用父类构造函数
-        # action mean range -1 to 1
+        # action mean range -1 to 1  输出动作的均值
         self.actor = nn.Sequential(  # 定义Actor网络
             nn.Linear(state_dim, 64),  # 全连接层
             nn.Tanh(),  # Tanh激活函数
@@ -40,7 +44,8 @@ class ActorCritic(nn.Module):  # 定义ActorCritic类，继承nn.Module
             nn.Linear(32, action_dim),  # 全连接层
             nn.Sigmoid()  # Sigmoid激活函数
         )
-        # critic
+
+        # critic  输出状态值
         self.critic = nn.Sequential(  # 定义Critic网络
             nn.Linear(state_dim, 64),  # 全连接层
             nn.Tanh(),  # Tanh激活函数
@@ -56,9 +61,20 @@ class ActorCritic(nn.Module):  # 定义ActorCritic类，继承nn.Module
         self.action_var = torch.full((action_dim,), action_std * action_std).to(device)  # 动作方差
 
     def forward(self):
-        raise NotImplementedError  # 未实现前向传播函数
+        """
+        forward函数,抛出未实现的错误,因为ActorCritic不直接使用forward
+        :return:
+        """
+        raise NotImplementedError
 
     def act(self, state, memory):
+        """
+        根据当前状态生成动作
+        使用Actor网络计算动作均值,创建多元正态分布,采样动作,计算动作的对数概率
+        :param state:
+        :param memory:
+        :return:
+        """
         action_mean = self.actor(state)  # 计算动作均值
         cov_mat = torch.diag(self.action_var).to(device)  # 计算协方差矩阵
         logger.info(' Current action mean: ' + str(action_mean))  # 记录当前动作均值
@@ -75,6 +91,13 @@ class ActorCritic(nn.Module):  # 定义ActorCritic类，继承nn.Module
         return action.detach(), action_mean.detach()  # 返回动作和动作均值
 
     def evaluate(self, state, action):
+        """
+        评估给定状态和动作
+        使用Actor网络计算动作均值,创建多元正态分布
+        :param state:
+        :param action:
+        :return:
+        """
         action_mean = self.actor(state)  # 计算动作均值
 
         action_var = self.action_var.expand_as(action_mean)  # 扩展动作方差
@@ -89,11 +112,19 @@ class ActorCritic(nn.Module):  # 定义ActorCritic类，继承nn.Module
         return action_log_probs, torch.squeeze(state_value), dist_entropy  # 返回动作对数概率、状态价值和分布熵
 
     def std_decay(self, epoch):
+        """
+        根据当前轮数衰减动作标准差和方差
+        :param epoch:
+        :return:
+        """
         self.action_std = self.init_action_std * (0.9 ** epoch)  # 计算当前动作标准差
         self.action_var = torch.full((self.action_dim,), self.action_std * self.action_std).to(device)  # 更新动作方差
 
 
-class PPO:  # 定义PPO类
+class PPO:
+    """
+    PPO类的构造函数,存储各种超参数
+    """
     def __init__(self, state_dim, action_dim, action_std, lr, betas, gamma, k_epochs, eps_clip):
         self.lr = lr  # 学习率
         self.betas = betas  # Adam优化器的beta参数
@@ -110,10 +141,22 @@ class PPO:  # 定义PPO类
         self.MseLoss = nn.MSELoss()  # 创建均方误差损失函数
 
     def explore_decay(self, epoch):
+        """
+        衰减当前和旧策略的动作标准差
+        :param epoch:
+        :return:
+        """
         self.policy.std_decay(epoch)  # 更新当前Actor-Critic网络动作标准差
         self.policy_old.std_decay(epoch)  # 更新旧Actor-Critic网络动作标准差
 
     def select_action(self, state, memory):
+        """
+        使用旧策略选择动作
+        将状态转换为张量,使用旧策略的act函数生成动作
+        :param state:
+        :param memory:
+        :return:
+        """
         state = torch.FloatTensor(state.reshape(1, -1)).to(device)  # 转换状态为tensor
         actions = self.policy_old.act(state, memory)  # 使用旧Actor-Critic网络选择动作
         stds = self.policy_old.action_var  # 获取旧动作方差
@@ -121,12 +164,18 @@ class PPO:  # 定义PPO类
             1].cpu().data.numpy().flatten(), stds.cpu().data.numpy().flatten()  # 返回动作、动作均值和动作方差
 
     def exploit(self, state):
+        """
+        使用当前策略进行开发
+        将状态转换为张量,使用当前策略的Actor网络计算动作均值
+        :param state:
+        :return:
+        """
         state = torch.FloatTensor(state.reshape(1, -1)).to(device)  # 转换状态为tensor
         action_mean = self.policy.actor(state)  # 使用当前Actor-Critic网络计算动作均值
         return action_mean[0].cpu().data.numpy().flatten()  # 返回动作均值
 
     def update(self, memory):
-        # Monte Carlo estimate of rewards:
+        # 使用蒙特卡洛方法估计奖励:  从后往前遍历奖励和终止标志,计算折扣奖励,并插入到rewards列表的开头
         rewards = []  # 初始化奖励列表
         discounted_reward = 0  # 初始化折扣奖励
         for reward, is_terminal in zip(reversed(memory.rewards), reversed(memory.is_terminals)):  # 反向遍历奖励和是否结束列表
@@ -135,18 +184,18 @@ class PPO:  # 定义PPO类
             discounted_reward = reward + (self.gamma * discounted_reward)  # 计算折扣奖励
             rewards.insert(0, discounted_reward)  # 将折扣奖励插入列表头部
 
-        # Normalizing the rewards:
+        # 对奖励进行归一化处理:
         rewards = torch.tensor(rewards).to(device)  # 转换奖励为tensor
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)  # 归一化奖励
 
-        # convert list to tensor
+        # 将状态、动作和对数概率的列表转换为张量,并进行维度压缩和分离
         old_states = torch.squeeze(torch.stack(memory.states).to(device), 1).detach()  # 转换状态列表为tensor
         old_actions = torch.squeeze(torch.stack(memory.actions).to(device), 1).detach()  # 转换动作列表为tensor
         old_log_probs = torch.squeeze(torch.stack(memory.logprobs), 1).to(device).detach()  # 转换对数概率列表为tensor
 
         # Optimize policy for K epochs:
         for _ in range(self.K_epochs):
-            # Evaluating old actions and values :
+            # 使用当前策略评估旧的状态和动作,得到对数概率、状态值和分布熵
             log_probs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)  # 计算新动作对数概率、状态价值和分布熵
 
             # Finding the ratio (pi_theta / pi_theta__old):

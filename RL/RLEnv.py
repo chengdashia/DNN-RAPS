@@ -1,38 +1,25 @@
-# 导入PyTorch库，用于构建和训练深度学习模型
 import torch
-# 导入PyTorch神经网络模块
 import torch.nn as nn
-# 导入PyTorch优化器模块
 import torch.optim as optim
-# 导入进度条模块，用于显示训练进度
 import tqdm
-
-# 导入NumPy库，用于数值计算
+import time
 import numpy as np
 # 导入线程模块，用于多线程处理
 import threading
-# 导入JSON模块，用于处理JSON数据
 import json
 # 导入操作符模块，用于数学运算
 import operator
+
 import sys
-# 导入配置模块，包含实验的配置参数
-import config
-# 导入工具模块，包含一些辅助函数
-import utils
-# 从Communicator模块导入所有内容，Communicator是用于客户端和服务器通信的基类
-from communication.communicator import *
-
-# 导入日志模块，用于记录日志信息
-import logging
-
-# 设置日志格式，包括时间戳、记录器名称、日志级别和日志消息
-logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
-# 创建日志记录器对象
-logger = logging.getLogger(__name__)
-
-# 添加上级目录到系统路径，以便能够导入项目中的其他模块
 sys.path.append('../')
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+import config
+import utils
+from correspondence import *
+from models.model_struct import model_cfg
+
 
 # 如果配置中指定使用随机种子
 if config.random:
@@ -44,67 +31,88 @@ if config.random:
     logger.info('Random seed: {}'.format(config.random_seed))
 
 
-class Env(Communicator):
+class Env(Correspondence):
     def __init__(self, index, ip_address, server_port, clients_list, model_name, model_cfg, batch_size):
-        super(Env, self).__init__(ip_address, server_port)
-        # 后面要用到的 先声明
+        super(Env, self).__init__(index, ip_address)
+
+        # 环境索引
         self.infer_state = None
         self.threads = None
         self.net_threads = None
         self.criterion = None
         self.optimizers = None
         self.nets = None
-        self.offloading_state = None
         self.split_layers = None
+        self.cluster_centers = None
+        self.group_model = None
+        self.baseline = None
+        self.offloading_state = None
         self.network_state = None
+        self.index = index
+        # 客户端列表
+        self.clients_list = clients_list
+        # 模型名称
+        self.model_name = model_name
+        # 批处理大小
+        self.batch_size = batch_size
+        # 模型配置(模型的层级结构)
+        self.model_cfg = model_cfg
+        # 状态维度
+        self.state_dim = 2 * config.G
+        # 动作维度
+        self.action_dim = config.G
+        # 初始化分组标签列表
+        self.group_labels = []
+        # 获取模型FLOPS列表
+        self.model_flops_list = self.get_model_flops_list(model_cfg, model_name)
+        # 断言模型层数与FLOPS列表长度相同
+        assert len(self.model_flops_list) == config.model_len
 
-        self.index = index  # 环境索引
-        self.clients_list = clients_list  # 客户端列表
-        self.model_name = model_name  # 模型名称
-        self.batch_size = batch_size  # 批大小
-        self.model_cfg = model_cfg  # 模型配置
-        self.state_dim = 2 * config.G  # 状态维度
-        self.action_dim = config.G  # 动作维度
-        self.group_labels = []  # 初始化分组标签列表
-        self.model_flops_list = self.get_model_flops_list(model_cfg, model_name)  # 获取模型FLOPS列表
-        assert len(self.model_flops_list) == config.model_len  # 断言模型层数与FLOPS列表长度相同
+        # Server configration
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.port = server_port
+        # self.model_name = model_name
+        # 绑定服务器IP和端口
+        self.sock.bind((self.ip, self.port))
+        # 初始化客户端套接字字典
+        self.client_socks = {}
 
-        # 服务器配置
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # 设置运行设备为CUDA或CPU
-        self.port = server_port  # 服务器端口
-        self.model_name = model_name  # 模型名称
-        self.sock.bind((ip_address, self.port))  # 绑定服务器IP和端口
-        self.client_socks = {}  # 初始化客户端套接字字典
+        # 等待所有客户端连接
+        while len(self.client_socks) < config.K:
+            # 监听连接
+            self.sock.listen(5)
+            # 接受客户端连接
+            (client_sock, (ip, port)) = self.sock.accept()
+            # 将客户端套接字添加到字典
+            self.client_socks[str(ip)] = client_sock
 
-        while len(self.client_socks) < config.K:  # 等待所有客户端连接
-            self.sock.listen(5)  # 监听连接
-            (client_sock, (ip, port)) = self.sock.accept()  # 接受客户端连接
-            self.client_socks[str(ip)] = client_sock  # 将客户端套接字添加到字典
-
-        # 获取整个模型
         self.uni_net = utils.get_model('Unit', self.model_name, 0, self.device, self.model_cfg)
 
-    """
-    重置环境状态，通常在每个episode开始时调用。将环境恢复到一个已知的初始状态，以便开始新的episode。
-    """
-
     def reset(self, done, first):
-        # 将split_layers 设置为一个列表，其中每个元素都是config.model_len - 1，表示初始时不进行卸载（即所有模型层都在客户端上执行）。
+        """
+        重置环境状态，通常在每个episode开始时调用。将环境恢复到一个已知的初始状态，以便开始新的episode。
+        :param done:
+        :param first:
+        :return:
+        """
+        # 将split_layers 设置为一个列表，其中每个元素都是config.model_len - 1，表示初始时不进行卸载(即所有模型层都在客户端上执行)。
         split_layers = [config.model_len - 1 for i in range(config.K)]
-        # 更新全局的分层信息。
         config.split_layer = split_layers
-        thread_number = config.K  # 线程数量
-        client_ips = config.CLIENTS_LIST  # 客户端IP列表
+        thread_number = config.K
+        client_ips = config.CLIENTS_LIST
         # 初始化客户端，包括模型和优化器的设置。
         self.initialize(split_layers)
-        msg = ['RESET_FLAG', True]  # 创建重置标志消息
-        self.scatter(msg)  # 向所有客户端发送重置标志消息
+        # 创建重置标志消息
+        msg = ['RESET_FLAG', True]
+        # 向所有客户端发送重置标志消息
+        self.scatter(msg)
 
         # 测试网络速度并记录网络状态
         self.test_network(thread_number, client_ips)
-        self.network_state = {}  # 初始化网络状态字典
+        # 初始化网络状态字典
+        self.network_state = {}
         for s in self.client_socks:  # 遍历每个客户端
-            msg = self.receive_message(self.client_socks[s], 'MSG_TEST_NETWORK_SPEED')  # 接收网络速度消息
+            msg = self.recv_message(self.client_socks[s], 'MSG_TEST_NETWORK_SPEED')  # 接收网络速度消息
             self.network_state[msg[1]] = msg[2]  # 存储网络速度
 
         # 经典联邦学习训练
@@ -112,8 +120,8 @@ class Env(Communicator):
             # 执行两次推理（训练）以模拟客户端的本地训练。
             self.infer(thread_number, client_ips)
             self.infer(thread_number, client_ips)
-        else:  # 否则
-            self.infer(thread_number, client_ips)  # 进行推理
+        else:
+            self.infer(thread_number, client_ips)
 
         # 获取当前的卸载状态
         self.offloading_state = self.get_offloading_state(
@@ -123,17 +131,19 @@ class Env(Communicator):
             self.model_name
         )
         # 设置为基线，用于后续奖励计算的参考。
-        self.baseline = self.infer_state
-        if len(self.group_labels) == 0:  # 如果没有分组标签
-            self.group_model, self.cluster_centers, self.group_labels = self.group(self.baseline,
-                                                                                   self.network_state)  # 进行分组
+        self.baseline = self.infer_state  # Set baseline for normalization
+        # 如果没有分组标签
+        if len(self.group_labels) == 0:
+            self.group_model, self.cluster_centers, self.group_labels = self.group(self.baseline, self.network_state)
 
-        logger.info('Basiline: ' + json.dumps(self.baseline))  # 记录基线
+        logger.info('Baseline: ' + json.dumps(self.baseline))
 
         # 合并和归一化环境状态
         state = self.concat_norm(self.clients_list, self.network_state, self.infer_state, self.offloading_state)  # 构建状态
-        assert self.state_dim == len(state)  # 断言状态维度与状态长度相同
-        return np.array(state)  # 返回状态
+        # 断言状态维度与状态长度相同
+        assert self.state_dim == len(state)
+        # 返回状态
+        return np.array(state)
 
     def group(self, baseline, network):
         """
@@ -151,13 +161,14 @@ class Env(Communicator):
         kmeans = KMeans(n_clusters=config.G, random_state=0).fit(X)  # 进行KMeans聚类
         cluster_centers = kmeans.cluster_centers_  # 获取聚类中心
         labels = kmeans.predict(X)  # 预测分组标签
+
         '''
-        # 聚类，考虑网络限制
+        # Clustering with network limitation
         kmeans = KMeans(n_clusters=config.G - 1, random_state=0).fit(X)
         cluster_centers = kmeans.cluster_centers_
         labels = kmeans.predict(X)
-        
-        # 我们手动将Pi3_2设为单独组，因为其带宽有限
+
+        # We manually set Pi3_2 as seperated group for limited bandwidth
         labels[-1] = 2
         '''
         # 返回聚类模型、聚类中心和分组标签
@@ -172,7 +183,7 @@ class Env(Communicator):
         """
         # 扩展动作到每个设备并初始化
         action = self.expand_actions(action, self.clients_list)
-        # 将动作转换为分层信息
+        # offloadings = 1 - np.clip(np.array(action), 0, 1)  将动作转换为分层信息
         config.split_layer = self.action_to_layer(action)
         # 获取分层信息
         split_layers = config.split_layer
@@ -197,7 +208,7 @@ class Env(Communicator):
         self.network_state = {}
         # 遍历每个客户端
         for s in self.client_socks:
-            msg = self.receive_message(self.client_socks[s], 'MSG_TEST_NETWORK_SPEED')  # 接收网络速度消息
+            msg = self.recv_message(self.client_socks[s], 'MSG_TEST_NETWORK_SPEED')  # 接收网络速度消息
             self.network_state[msg[1]] = msg[2]  # 存储网络速度
 
         # 进行推理
@@ -208,7 +219,7 @@ class Env(Communicator):
             self.clients_list,
             self.model_cfg,
             self.model_name
-            )
+        )
         # 计算奖励、最大时间和是否完成
         reward, maxtime, done = self.calculate_reward(self.infer_state)
         # 记录每次迭代的训练时间
@@ -223,8 +234,8 @@ class Env(Communicator):
     def initialize(self, split_layers):
         """
         根据客户端是否需要卸载任务，初始化客户端模型和优化器。
-        :param split_layers: 
-        :return: 
+        :param split_layers:
+        :return:
         """
         # 存储分层信息
         self.split_layers = split_layers
@@ -278,7 +289,7 @@ class Env(Communicator):
         :param client_ip:
         :return:
         """
-        msg = self.receive_message(self.client_socks[client_ip], 'MSG_TEST_NETWORK_SPEED')  # 接收网络测试消息
+        msg = self.recv_message(self.client_socks[client_ip], 'MSG_TEST_NETWORK_SPEED')  # 接收网络测试消息
         msg = ['MSG_TEST_NETWORK_SPEED', self.uni_net.cpu().state_dict()]  # 创建网络测试消息
         self.send_message(self.client_socks[client_ip], msg)  # 发送网络测试消息
 
@@ -310,7 +321,7 @@ class Env(Communicator):
 
         self.infer_state = {}  # 初始化推理状态字典
         for s in self.client_socks:  # 遍历每个客户端
-            msg = self.receive_message(self.client_socks[s], 'MSG_INFER_SPEED')  # 接收推理速度消息
+            msg = self.recv_message(self.client_socks[s], 'MSG_INFER_SPEED')  # 接收推理速度消息
             self.infer_state[msg[1]] = msg[2]  # 存储推理速度
 
     def _thread_infer_no_offloading(self, client_ip):
@@ -328,7 +339,7 @@ class Env(Communicator):
         :return:
         """
         for i in range(config.iteration[client_ip]):  # 遍历每次迭代
-            msg = self.receive_message(self.client_socks[client_ip], 'MSG_LOCAL_ACTIVATIONS_CLIENT_TO_SERVER')  # 接收客户端激活值和标签
+            msg = self.recv_message(self.client_socks[client_ip], 'MSG_LOCAL_ACTIVATIONS_CLIENT_TO_SERVER')  # 接收客户端激活值和标签
             smashed_layers = msg[1]  # 获取激活值
             labels = msg[2]  # 获取标签
 
@@ -437,11 +448,11 @@ class Env(Communicator):
         reward = 0  # 初始化奖励
         done = False  # 初始化完成标志为False
 
-        max_basetime = max(self.baseline.items(), key=operator.itemgetter(1))[1]  # 获取基准最大时间
-        max_infertime = max(infer_state.items(), key=operator.itemgetter(1))[1]  # 获取推理最大时间
-        max_infertime_index = max(infer_state.items(), key=operator.itemgetter(1))[0]  # 获取推理最大时间索引
+        max_base_time = max(self.baseline.items(), key=operator.itemgetter(1))[1]  # 获取基准最大时间
+        max_infer_time = max(infer_state.items(), key=operator.itemgetter(1))[1]  # 获取推理最大时间
+        max_infer_time_index = max(infer_state.items(), key=operator.itemgetter(1))[0]  # 获取推理最大时间索引
 
-        if max_infertime >= 1 * max_basetime:  # 如果推理最大时间大于等于基准最大时间
+        if max_infer_time >= 1 * max_base_time:  # 如果推理最大时间大于等于基准最大时间
             done = True  # 设置完成标志为True
         # reward += - 1 # 减小奖励
         else:
@@ -455,7 +466,7 @@ class Env(Communicator):
                 r = (infer_state[k] - self.baseline[k]) / infer_state[k]  # 计算惩罚比例
                 reward -= r  # 减小奖励
 
-        return reward, max_infertime, done  # 返回奖励、最大时间和完成标志
+        return reward, max_infer_time, done  # 返回奖励、最大时间和完成标志
 
     # 该函数将组动作扩展到每个客户端
     def expand_actions(self, actions, clients_list):
@@ -479,25 +490,25 @@ class Env(Communicator):
         return split_layer  # 返回分层列表
 
 
-class RL_Client(Communicator):
-    """
-    定义了 RL 客户端类，负责在客户端设备上执行模型训练和与服务器的通信。
-    """
+class RL_Client(Correspondence):
     def __init__(self, index, ip_address, server_addr, server_port, data_len, model_name, split_layer, model_cfg):
-        super(RL_Client, self).__init__(index, ip_address)  # 调用父类构造函数
-        self.optimizer = None
+        super(RL_Client, self).__init__(index, ip_address)
         self.criterion = None
+        self.optimizer = None
         self.net = None
         self.split_layer = None
-        self.ip_address = ip_address  # 客户端IP地址
-        self.data_len = data_len  # 数据长度
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # 设置运行设备为CUDA或CPU
-        self.model_name = model_name  # 模型名称
-        self.model_cfg = model_cfg  # 模型配置
-        self.uninet = utils.get_model('Unit', self.model_name, 0, self.device, self.model_cfg)  # 获取整个模型
+        # 客户端IP地址
+        self.ip_address = ip_address
+        self.data_len = data_len
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model_name = model_name
+        self.model_cfg = model_cfg
+        # 获取整个模型
+        self.uni_net = utils.get_model('Unit', self.model_name, 0, self.device, self.model_cfg)
 
-        logger.info('==> Connecting to Server..')  # 记录信息
-        self.sock.connect((server_addr, server_port))  # 连接服务器
+        logger.info('==> Connecting to Server..')
+        # 连接服务器
+        self.sock.connect((server_addr, server_port))
 
     def initialize(self, split_layer):
         """
@@ -505,21 +516,29 @@ class RL_Client(Communicator):
         :param split_layer:
         :return:
         """
-        self.split_layer = split_layer  # 分层索引
-        self.net = utils.get_model('Client', self.model_name, self.split_layer, self.device, self.model_cfg)  # 获取客户端模型
-        self.optimizer = optim.SGD(self.net.parameters(), lr=config.LR, momentum=0.9)  # 初始化优化器
-        self.criterion = nn.CrossEntropyLoss()  # 定义损失函数
+        self.split_layer = split_layer
+        # 获取客户端模型
+        self.net = utils.get_model('Client', self.model_name, self.split_layer, self.device, self.model_cfg)
+        # 初始化优化器
+        self.optimizer = optim.SGD(self.net.parameters(),
+                                   lr=config.LR,
+                                   momentum=0.9)
+        # 定义损失函数
+        self.criterion = nn.CrossEntropyLoss()
 
-        # 首先测试网络速度
-        network_time_start = time.time()  # 记录开始时间
-        msg = ['MSG_TEST_NETWORK_SPEED', self.uninet.cpu().state_dict()]  # 创建网络测试消息
-        self.send_message(self.sock, msg)  # 发送网络测试消息
-        msg = self.receive_message(self.sock, 'MSG_TEST_NETWORK_SPEED')[1]  # 接收网络测试消息
-        network_time_end = time.time()  # 记录结束时间
-        network_speed = (2 * config.model_size * 8) / (network_time_end - network_time_start)  # 计算网络速度
-
-        msg = ['MSG_TEST_NETWORK_SPEED', self.ip_address, network_speed]  # 创建网络速度消息
-        self.send_message(self.sock, msg)  # 发送网络速度消息
+        # First test network speed
+        network_time_start = time.time()
+        # 创建网络测试消息
+        msg = ['MSG_TEST_NETWORK_SPEED', self.uni_net.cpu().state_dict()]
+        self.send_message(self.sock, msg)
+        # 接收网络测试消息
+        msg = self.recv_message(self.sock, 'MSG_TEST_NETWORK_SPEED')[1]
+        network_time_end = time.time()
+        # 计算网络速度
+        network_speed = (2 * config.model_size * 8) / (network_time_end - network_time_start)  # format is Mbit/s
+        # 创建网络速度消息
+        msg = ['MSG_TEST_NETWORK_SPEED', self.ip, network_speed]
+        self.send_message(self.sock, msg)
 
     def infer(self, train_loader):
         """
@@ -527,41 +546,56 @@ class RL_Client(Communicator):
         :param train_loader:
         :return:
         """
-        self.net.to(self.device)  # 移动模型到设备
-        self.net.train()  # 设置为训练模式
-        s_time_infer = time.time()  # 记录推理开始时间
-        if self.split_layer == len([self.model_name]) - 1:  # 如果不需要卸载
-            for batch_idx, (inputs, targets) in enumerate(tqdm.tqdm(train_loader)):  # 遍历训练数据
-                inputs, targets = inputs.to(self.device), targets.to(self.device)  # 移动数据到设备
-                outputs = self.net(inputs)  # 前向传播
-                loss = self.criterion(outputs, targets)  # 计算损失
-                loss.backward()  # 反向传播
-                self.optimizer.step()  # 更新参数
-                if batch_idx >= config.iteration[self.ip_address] - 1:  # 如果达到指定迭代次数
-                    break  # 跳出循环
-        else:  # 如果需要卸载
-            for batch_idx, (inputs, targets) in enumerate(tqdm.tqdm(train_loader)):  # 遍历训练数据
-                inputs, targets = inputs.to(self.device), targets.to(self.device)  # 移动数据到设备
-                outputs = self.net(inputs)  # 前向传播
+        # 移动模型到设备
+        self.net.to(self.device)
+        # 设置为训练模式
+        self.net.train()
 
-                msg = ['MSG_LOCAL_ACTIVATIONS_CLIENT_TO_SERVER', outputs.cpu(), targets.cpu()]  # 创建激活值和标签消息
-                self.send_message(self.sock, msg)  # 发送激活值和标签消息
+        s_time_infer = time.time()
+        # No offloading
+        if self.split_layer == len(model_cfg[self.model_name]) - 1:
+            # 遍历训练数据
+            for batch_idx, (inputs, targets) in enumerate(tqdm.tqdm(train_loader)):
+                # 移动数据到设备
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                # 前向传播
+                outputs = self.net(inputs)
+                # 计算损失
+                loss = self.criterion(outputs, targets)
+                # 反向传播
+                loss.backward()
+                # 更新参数
+                self.optimizer.step()
+                # 如果达到指定迭代次数
+                if batch_idx >= config.iteration[self.ip_address] - 1:
+                    break
+        else:  # Offloading training
+            for batch_idx, (inputs, targets) in enumerate(tqdm.tqdm(train_loader)):
+                # 移动数据到设备
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                # 前向传播
+                outputs = self.net(inputs)
 
-                # 等待接收服务器梯度
-                gradients = self.receive_message(self.sock)[1].to(self.device)  # 接收梯度
+                # 创建激活值和标签消息
+                msg = ['MSG_LOCAL_ACTIVATIONS_CLIENT_TO_SERVER', outputs.cpu(), targets.cpu()]
+                self.send_message(self.sock, msg)
+
+                # Wait receiving server gradients
+                gradients = self.recv_message(self.sock)[1].to(self.device)
 
                 outputs.backward(gradients)  # 反向传播
                 self.optimizer.step()  # 更新参数
 
-                if batch_idx >= config.iteration[self.ip_address] - 1:  # 如果达到指定迭代次数
-                    break  # 跳出循环
+                # 如果达到指定迭代次数
+                if batch_idx >= config.iteration[self.ip_address] - 1:
+                    break
 
-        e_time_infer = time.time()  # 记录推理结束时间
-        logger.info('Training time: ' + str(e_time_infer - s_time_infer))  # 记录训练时间
+        e_time_infer = time.time()
+        logger.info('Training time: ' + str(e_time_infer - s_time_infer))
 
-        infer_speed = (e_time_infer - s_time_infer) / config.iteration[self.ip_address]  # 计算推理速度
-        msg = ['MSG_INFER_SPEED', self.ip_address, infer_speed]  # 创建推理速度消息
-        self.send_message(self.sock, msg)  # 发送推理速度消息
+        infer_speed = (e_time_infer - s_time_infer) / config.iteration[self.ip_address]
+        msg = ['MSG_INFER_SPEED', self.ip, infer_speed]
+        self.send_message(self.sock, msg)
 
     def reinitialize(self, split_layers):
         """
@@ -570,3 +604,4 @@ class RL_Client(Communicator):
         :return:
         """
         self.initialize(split_layers)
+

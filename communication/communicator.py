@@ -1,4 +1,4 @@
-# Communicator Object
+# Correspondence Object
 import pickle
 import time
 import struct
@@ -6,7 +6,7 @@ import socket
 import logging
 
 # 配置日志记录器
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 

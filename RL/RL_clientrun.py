@@ -1,6 +1,3 @@
-# 导入系统模块
-import sys
-
 # 导入PyTorch库，用于深度学习模型的构建和训练
 import torch
 # 导入socket模块，用于处理网络通信
@@ -12,7 +9,10 @@ import numpy as np
 
 # 导入日志模块，用于记录日志信息
 import logging
-
+# 导入系统模块
+import sys
+# 添加上级目录到系统路径，以便能够导入同一项目中其他模块的类和函数
+sys.path.append('../')
 # 从RLEnv模块导入RL_Client类
 from RLEnv import RL_Client
 import config
@@ -22,9 +22,6 @@ from models.model_struct import model_cfg
 logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
 # 获取logger对象，用于记录日志
 logger = logging.getLogger(__name__)
-
-# 添加上级目录到系统路径，以便能够导入同一项目中其他模块的类和函数
-sys.path.append('../')
 
 
 # 如果配置中指定使用随机种子
@@ -70,7 +67,7 @@ rl_client = RL_Client(
 # 无限循环，用于持续接收服务器指令和执行任务
 while True:
 	# 接收重置标志
-	reset_flag = rl_client.receive_message(rl_client.sock, 'RESET_FLAG')[1]
+	reset_flag = rl_client.recv_message(rl_client.sock, 'RESET_FLAG')[1]
 	# 如果需要重置
 	if reset_flag:
 		# 初始化RL_Client
@@ -79,7 +76,7 @@ while True:
 		# 否则，接收分层信息
 		logger.info('==> Next Timestep..')
 		# 接收分层信息
-		config.split_layer = rl_client.receive_message(rl_client.sock, 'SPLIT_LAYERS')[1]
+		config.split_layer = rl_client.recv_message(rl_client.sock, 'SPLIT_LAYERS')[1]
 
 		rl_client.reinitialize(config.split_layer[index])
 

@@ -13,30 +13,27 @@
         如果当前episode完成或达到控制更新epoch数量,跳出时间步循环。
 该代码的主要作用是实现PPO算法,通过与环境的交互来学习最优策略,以最大化累积奖励。它记录了每个更新epoch的结果,并定期保存智能体模型权重。
 """
-import sys
 import pickle
 import torch
 import tqdm
 import numpy as np
-
-# 导入日志模块，用于记录日志信息
-import logging
+import sys
+# 添加上级目录到系统路径，以便能够导入项目中的其他模块
+sys.path.append('../')
 # 从RLEnv模块导入Env类，这是强化学习环境的类
 from RLEnv import Env
 # 导入配置模块，包含实验的配置参数
 import config
 # 导入PPO模块，包含PPO智能体的实现
 import PPO
-
 from models.model_struct import model_cfg
-
+# 导入日志模块，用于记录日志信息
+import logging
 # 设置日志格式，包括时间戳、日志记录器名称、日志级别和日志消息
 logging.basicConfig(level=logging.INFO, format='%(asc_time)s - %(name)s - %(level_name)s - %(message)s')
 # 创建日志记录器对象
 logger = logging.getLogger(__name__)
 
-# 添加上级目录到系统路径，以便能够导入项目中的其他模块
-sys.path.append('../')
 
 # 如果配置中指定使用随机种子
 if config.random:
@@ -102,7 +99,7 @@ for i_episode in tqdm.tqdm(range(1, config.max_episodes + 1)):
         state = env.reset(done, first)
 
         # 遍历每个时间步
-        for t in range(config.max_timesteps):
+        for t in range(config.max_time_steps):
             # 更新时间步长
             time_step += 1
             # 从PPO智能体选择动作、动作均值和标准差

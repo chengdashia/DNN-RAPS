@@ -86,7 +86,7 @@ class ActorCritic(nn.Module):
 
         memory.states.append(state)  # 将状态存入memory
         memory.actions.append(action)  # 将动作存入memory
-        memory.logprobs.append(action_log_prob)  # 将对数概率存入memory
+        memory.log_probs.append(action_log_prob)  # 将对数概率存入memory
 
         return action.detach(), action_mean.detach()  # 返回动作和动作均值
 
@@ -191,7 +191,7 @@ class PPO:
         # 将状态、动作和对数概率的列表转换为张量,并进行维度压缩和分离
         old_states = torch.squeeze(torch.stack(memory.states).to(device), 1).detach()  # 转换状态列表为tensor
         old_actions = torch.squeeze(torch.stack(memory.actions).to(device), 1).detach()  # 转换动作列表为tensor
-        old_log_probs = torch.squeeze(torch.stack(memory.logprobs), 1).to(device).detach()  # 转换对数概率列表为tensor
+        old_log_probs = torch.squeeze(torch.stack(memory.log_probs), 1).to(device).detach()  # 转换对数概率列表为tensor
 
         # Optimize policy for K epochs:
         for _ in range(self.K_epochs):

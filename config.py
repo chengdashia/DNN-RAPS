@@ -4,7 +4,7 @@ import sys
 """
 
 # Network configration
-SERVER_ADDR = '192.168.110.35'
+SERVER_ADDR = '192.168.215.128'
 SERVER_PORT = 51000
 
 
@@ -41,7 +41,7 @@ local_server_list = [
 # 线上部署
 server_list = [
     {
-        "ip": "192.168.215.133",
+        "ip": "192.168.215.132",
         "username": "root",
         "password": "123456",
         "hostname": "client1",
@@ -51,7 +51,7 @@ server_list = [
         }
     },
     {
-        "ip": "192.168.215.135",
+        "ip": "192.168.215.133",
         "username": "root",
         "password": "123456",
         "hostname": "client2",
@@ -61,10 +61,10 @@ server_list = [
         }
     },
     {
-        "ip": "192.168.215.136",
+        "ip": "192.168.215.135",
         "username": "root",
         "password": "123456",
-        "hostname": "client1",
+        "hostname": "client3",
         "application": {
             "VGG5": 9001,
             "VGG6": 9002
@@ -78,8 +78,8 @@ dataset_config = {
     'VGG6': ""
 }
 # Dataset configration
-home = sys.path[0].split('SynerGist')[0] + 'FedAdapt'
-dataset_path = home + '/dataset/'
+home = sys.path[0].split('SynerGist')[0] + 'SynerGist'
+dataset_path = home + '/dataset/vgg5/'
 # data length
 N = 10000
 # Batch size
@@ -93,28 +93,26 @@ model_size = 1.28
 model_flops = 32.902
 total_flops = 8488192
 # Initial split layers
-split_layer = [6, 6, 6, 6, 6]
+split_layer = [6, 6, 6]
 model_len = 7
 
-# FL training configration
-R = 100 # FL rounds
-LR = 0.01 # Learning rate
-BS = 100 # Batch size
 
 # RL training configration
+LR = 0.01                  # Learning rate
 max_episodes = 100         # max training episodes
-max_timesteps = 100        # max timesteps in one episode
+max_time_steps = 100       # max time steps in one episode
 exploration_times = 20	   # exploration times without std decay
 n_latent_var = 64          # number of variables in hidden layer
 action_std = 0.5           # constant std for action distribution (Multivariate Normal)
-update_timestep = 10       # update policy every n timesteps
+update_timestep = 10       # update policy every n time steps
 K_epochs = 50              # update policy for K epochs
 eps_clip = 0.2             # clip parameter for PPO
 rl_gamma = 0.9             # discount factor
-rl_b = 100				   # Batchsize
+rl_b = 100				   # Batch size
 rl_lr = 0.0003             # parameters for Adam optimizer
 rl_betas = (0.9, 0.999)
-iteration = {'192.168.215.129' : 5, '192.168.215.130' : 5, '192.168.215.131': 50, '192.168.215.132': 5, '192.168.215.133': 5}  # infer times for each device
+# infer times for each device
+iteration = {server['ip']: 5 for server in server_list}
 
 random = True
 random_seed = 0

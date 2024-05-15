@@ -17,7 +17,9 @@ import pickle
 import torch
 import tqdm
 import numpy as np
+import torch.optim as optim
 import sys
+import torch.nn as nn
 # 添加上级目录到系统路径，以便能够导入项目中的其他模块
 sys.path.append('../')
 # 从RLEnv模块导入Env类，这是强化学习环境的类
@@ -82,6 +84,10 @@ update_epoch = 1
 # 初始化结果字典
 res = {'rewards': [], 'maxtime': [], 'actions': [], 'std': []}
 
+# # 创建IAF模型的优化器和损失函数
+# iaf_optimizer = optim.Adam(env.state_derivation.iaf.parameters(), lr=config.iaf_lr)
+# iaf_loss_fn = nn.MSELoss()
+
 # 遍历每个episode
 for i_episode in tqdm.tqdm(range(1, config.max_episodes + 1)):
     # 初始化完成标志为False
@@ -97,6 +103,7 @@ for i_episode in tqdm.tqdm(range(1, config.max_episodes + 1)):
         first = False
         # 重置环境，获取初始状态
         state = env.reset(done, first)
+        print("State shape: ", state.shape)
 
         # 遍历每个时间步
         for t in range(config.max_time_steps):
@@ -106,6 +113,10 @@ for i_episode in tqdm.tqdm(range(1, config.max_episodes + 1)):
             action, action_mean, std = ppo.select_action(state, memory)
             # 在环境中执行动作，获取新状态、奖励、最大时间和完成标志
             state, reward, maxtime, done = env.step(action, done)
+
+            # # 更新IAF模型的参数
+            # env.update_state_derivation(iaf_optimizer, iaf_loss_fn)
+
             # 记录当前奖励和最大时间
             logger.info('Current reward: ' + str(reward))
             logger.info('Current maxtime: ' + str(maxtime))

@@ -36,8 +36,9 @@ class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, action_std):
         super(ActorCritic, self).__init__()  # 调用父类构造函数
         # action mean range -1 to 1  输出动作的均值
+        # 由于衍生后的状态维度是原始状态维度的3倍(当前状态、平均状态和平均状态变化量),将Actor网络和Critic网络的输入层大小乘以3,以匹配衍生后的状态维度。
         self.actor = nn.Sequential(  # 定义Actor网络
-            nn.Linear(state_dim, 64),  # 全连接层
+            nn.Linear(state_dim * 3, 64),  # 全连接层
             nn.Tanh(),  # Tanh激活函数
             nn.Linear(64, 32),  # 全连接层
             nn.Tanh(),  # Tanh激活函数
@@ -47,7 +48,7 @@ class ActorCritic(nn.Module):
 
         # critic  输出状态值
         self.critic = nn.Sequential(  # 定义Critic网络
-            nn.Linear(state_dim, 64),  # 全连接层
+            nn.Linear(state_dim * 3, 64),  # 全连接层
             nn.Tanh(),  # Tanh激活函数
             nn.Linear(64, 32),  # 全连接层
             nn.Tanh(),  # Tanh激活函数

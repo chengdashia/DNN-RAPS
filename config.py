@@ -114,5 +114,12 @@ rl_betas = (0.9, 0.999)
 # infer times for each device
 iteration = {server['ip']: 5 for server in server_list}
 
+# 状态衍生的时间窗口大小
+window_size = 10
+
+# IAF model configuration
+hidden_dim = 64
+iaf_lr = 0.001
+
 random = True
 random_seed = 0

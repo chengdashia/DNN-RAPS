@@ -19,6 +19,10 @@ import config
 import utils
 from correspondence import *
 from models.model_struct import model_cfg
+# 状态衍生
+from state_derivation import StateDerivation
+from iaf_state_derivation import IAFStateDerivation
+
 
 
 # 如果配置中指定使用随机种子
@@ -65,6 +69,11 @@ class Env(Correspondence):
         self.group_labels = []
         # 获取模型FLOPS列表
         self.model_flops_list = self.get_model_flops_list(model_cfg, model_name)
+
+        # 状态衍生
+        self.state_derivation = StateDerivation(self.state_dim, config.window_size)
+        # self.state_derivation = IAFStateDerivation(self.state_dim, config.hidden_dim)
+
         # 断言模型层数与FLOPS列表长度相同
         assert len(self.model_flops_list) == config.model_len
 
@@ -140,10 +149,13 @@ class Env(Correspondence):
 
         # 合并和归一化环境状态
         state = self.concat_norm(self.clients_list, self.network_state, self.infer_state, self.offloading_state)  # 构建状态
+        # 状态衍生 重置后,都会对状态进行衍生,得到包含历史信息的衍生状态。
+        derived_state = self.state_derivation.derive_state(state)
+
         # 断言状态维度与状态长度相同
-        assert self.state_dim == len(state)
+        #assert self.state_dim == len(derived_state)
         # 返回状态
-        return np.array(state)
+        return np.array(derived_state)
 
     def group(self, baseline, network):
         """
@@ -226,10 +238,28 @@ class Env(Correspondence):
         logger.info('Training time per iteration: ' + json.dumps(self.infer_state))
         # 构建状态
         state = self.concat_norm(self.clients_list, self.network_state, self.infer_state, self.offloading_state)
+        # 执行动作后,都会对状态进行衍生,得到包含历史信息的衍生状态。
+        derived_state = self.state_derivation.derive_state(state)
+
         # 断言状态维度与状态长度相同
-        assert self.state_dim == len(state)
+        # assert self.state_dim == len(derived_state)
         # 返回状态、奖励、最大时间和是否完成
-        return np.array(state), reward, maxtime, done
+        return np.array(derived_state), reward, maxtime, done
+
+    def update_state_derivation(self, optimizer, loss_fn):
+        optimizer.zero_grad()
+
+        # 获取状态并转换为PyTorch张量
+        state = self.concat_norm(self.clients_list, self.network_state, self.infer_state, self.offloading_state)
+        state_tensor = torch.FloatTensor(state)
+
+        # 使用IAF生成衍生状态
+        derived_state = self.state_derivation.iaf(state_tensor)
+
+        # 计算损失并执行反向传播
+        loss = loss_fn(derived_state, state_tensor)
+        loss.backward()
+        optimizer.step()
 
     def initialize(self, split_layers):
         """

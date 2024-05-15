@@ -111,11 +111,13 @@ rl_gamma = 0.9             # discount factor
 rl_b = 100				   # Batch size
 rl_lr = 0.0003             # parameters for Adam optimizer
 rl_betas = (0.9, 0.999)
+
 # infer times for each device
 iteration = {server['ip']: 5 for server in server_list}
 
 # 状态衍生的时间窗口大小
 window_size = 10
+buffer_size = 10
 
 # IAF model configuration
 hidden_dim = 64

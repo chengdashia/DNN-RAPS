@@ -80,7 +80,7 @@ def get_loss_acc(result_list):
 
 def handle_client(conn, client_name):
     for iteration in range(1, max_iterations + 1):
-        print(f"Start processing round {iteration} for {client_name}")
+        print(f"======================  Start processing round {iteration} ================================")
         message = receive_data(conn)
         if not message:
             continue

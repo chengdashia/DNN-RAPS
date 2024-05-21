@@ -122,7 +122,7 @@ def client(name, client_port=None):
 
     # 连接到服务器
     try:
-        client_socket.connect(('localhost', 90001))
+        client_socket.connect(('localhost', 9000))
         print(f"Connected to server as {name}")
     except socket.error as e:
         print(f"Failed to connect to server: {e}")

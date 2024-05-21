@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import torch.nn.functional as F
 from network_utils import send_data, receive_data
-from config import dataset_config, B, dataset_path, iterations
+from config import B, dataset_path, iterations
 
 
 def get_next_client(current_client):
@@ -109,6 +109,7 @@ def handle_client(conn, client_name):
 
 
 def accept_connections(server_socket):
+    # 等待所有的客户端连接
     while len(clients) < len(node_layer_indices):
         conn, addr = server_socket.accept()
         client_name = receive_data(conn)
@@ -117,6 +118,7 @@ def accept_connections(server_socket):
         threading.Thread(target=handle_client, args=(conn, client_name)).start()
 
     first_client_name = list(node_layer_indices.keys())[0]
+    # 消息封装
     data_to_send = [node_layer_indices, data_list, cumulative_layer_number]
     # 序列化数据后发送
     send_data(clients[first_client_name], data_to_send)
@@ -125,7 +127,7 @@ def accept_connections(server_socket):
 def main():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # 创建一个 TCP 套接字，使用 IPv4 地址
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # 设置套接字选项，允许重新使用地址
-    server_socket.bind(('localhost', 12345))  # 将套接字绑定到 localhost 上的 12345 端口
+    server_socket.bind(('localhost', 9000))  # 将套接字绑定到 localhost 上的 12345 端口
     server_socket.listen()  # 配置套接字进入监听状态，等待客户端连接
     print("Server is listening for connections...")
     accept_connections(server_socket)  # 调用 accept_connections 函数来接受并处理连接

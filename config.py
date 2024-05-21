@@ -84,6 +84,8 @@ dataset_path = home + '/dataset/vgg5/'
 N = 10000
 # Batch size
 B = 256
+# 迭代次数 N为数据总数，B为批次大小
+iterations = int(N / B)
 # Number of devices
 K = len(server_list)
 # Number of groups

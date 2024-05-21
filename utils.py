@@ -311,7 +311,6 @@ def norm_list(alist):
 	:param alist:
 	:return:
 	"""
-
     return [l / sum(alist) for l in alist]
 
 

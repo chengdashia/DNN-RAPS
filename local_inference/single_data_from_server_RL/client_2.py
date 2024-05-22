@@ -6,6 +6,11 @@ import socket
 import time
 import config
 from network_utils import send_data, receive_data
+from utils import get_client_app_port_by_name
+import logging
+
+# 配置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def get_model(layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number):
@@ -90,17 +95,19 @@ def node_inference(node_indices, data_list, cumulative_layer_number):
     开始当前节点的推理
 
     参数:
-    model (nn.Module): 模型
-    node (socket): socket 端点
-    msg (list): 从上一个客户端接收的数据
+    node_indices (list): 当前节点的层索引
+    data_list (list): 数据列表
+    cumulative_layer_number (int): 累计层数
+
+    返回值:
+    list: 推理结果列表
+    int: 累计层数
     """
-    print("*********************开始推理************************")
-    # 迭代次数 N为数据总数，B为批次大小
-    iterations = int(config.N / config.B)
+    logging.info("*********************开始推理************************")
     # 迭代处理每一批数据
     result_list = []
     start_layer = cumulative_layer_number
-    for i in range(iterations):
+    for i in range(config.iterations):
         data = data_list[i]
         # 获取推理后的结果
         result, cumulative_layer_number = calculate_output(node_indices, data, start_layer)
@@ -115,17 +122,17 @@ def client(name, client_port=None):
     if client_port:
         try:
             client_socket.bind(('', client_port))  # 绑定客户端的端口
-            print(f"Bound to local port {client_port}")
+            logging.info(f"绑定到本地端口 {client_port}")
         except socket.error as e:
-            print(f"Failed to bind to port {client_port}: {e}")
+            logging.error(f"绑定到端口 {client_port} 失败: {e}")
             return
 
     # 连接到服务器
     try:
         client_socket.connect(('localhost', 9000))
-        print(f"Connected to server as {name}")
+        logging.info(f"作为 {name} 连接到服务器")
     except socket.error as e:
-        print(f"Failed to connect to server: {e}")
+        logging.error(f"连接到服务器失败: {e}")
         return
 
     send_data(client_socket, name)
@@ -134,7 +141,7 @@ def client(name, client_port=None):
         data = receive_data(client_socket)
         if data:
             node_indices, data_list, cumulative_layer_number = data
-            print(f"{name} Received at : {node_indices}, {data_list}")
+            logging.info(f"{name} 收到数据: {node_indices}, {data_list}")
             start_time = time.time()
             processed_data_list, processed_cumulative_layer_number = node_inference(node_indices,
                                                                                     data_list,
@@ -152,15 +159,12 @@ def client(name, client_port=None):
 if __name__ == "__main__":
     client_name = 'client2'
     model_name = 'VGG5'
+    host_ip, host_port = get_client_app_port_by_name(client_name, model_name)
+
     # 初始化模型并载入预训练权重
     model = VGG5("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg)
     model.eval()
     model.load_state_dict(torch.load("../../models/vgg5/vgg5.pth"))
 
-    # 损失列表
-    loss_list = []
-    # 准确率列表
-    acc_list = []
-
     # 调用客户端函数，并指定客户端端口号
-    client(client_name, client_port=9002)
+    client(client_name, client_port=host_port)

@@ -5,6 +5,10 @@ from torchvision import datasets, transforms
 import torch.nn.functional as F
 from network_utils import send_data, receive_data
 from config import B, dataset_path, iterations
+import logging
+
+# 配置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def get_next_client(current_client):
@@ -72,20 +76,24 @@ def calculate_accuracy(fx, y):
     return acc
 
 
-def get_loss_acc(result_list):
+def get_loss_acc(result_list, target):
     """
     计算结果的loss和acc
     :param result_list:    客户端的推理结果
+    :param target:         真实标签
     :return:              loss和acc
     """
+    loss_list, acc_list = [], []
     for i in range(iterations):
-        loss = F.cross_entropy(result_list[i], target_list[i])
-        acc = calculate_accuracy(result_list[i], target_list[i])
+        loss = F.cross_entropy(result_list[i], target[i]).item()
+        acc = calculate_accuracy(result_list[i], target[i])
         loss_list.append(loss)
         acc_list.append(acc)
-    print("loss :{:.4}".format(sum(loss_list) / len(loss_list)))
-    print("acc :{:.4}%".format(sum(acc_list) / len(acc_list)))
-    print("")
+    avg_loss = sum(loss_list) / len(loss_list)
+    avg_acc = sum(acc_list) / len(acc_list)
+    logging.info(f"Average Loss: {avg_loss:.4f}")
+    logging.info(f"Average Accuracy: {avg_acc:.4f}%")
+    return avg_loss, avg_acc
 
 
 def handle_client(conn, client_name):
@@ -96,24 +104,22 @@ def handle_client(conn, client_name):
     :return:              None
     """
     for iteration in range(1, max_iterations + 1):
-        print(f"======================  Start processing round {iteration} ================================")
+        logging.info(f"Start processing round {iteration}")
         message = receive_data(conn)
         if not message:
             continue
 
         inference_time, data_inference_list, processed_cumulative_layer_number = message
-        print(f"Processing time from {client_name}: {inference_time} seconds")
-        # print(f"processed_data_cpu_list from {client_name}: {processed_data_cpu_list}")
-        # print(f"processed_target_cpu_list from {client_name}: {processed_target_cpu_list}")
+        logging.info(f"Processing time from {client_name}: {inference_time} seconds")
 
         next_client_name = get_next_client(client_name)
         # 如果是最后一个客户端 则计算acc和loss。同时数据初始化
         if next_client_name is None:
             # 计算结果
-            get_loss_acc(data_inference_list)
+            get_loss_acc(data_inference_list, target_list)
 
             # 重新初始化
-            print("Round completed. Restarting with initial data.")
+            logging.info("Round completed. Restarting with initial data.")
             data_inference_list = data_list
             processed_cumulative_layer_number = cumulative_layer_number
             next_client_name = list(node_layer_indices.keys())[0]
@@ -155,22 +161,11 @@ def main():
 
 
 if __name__ == "__main__":
-    # 定义初始数据
     node_layer_indices = {'client1': [0, 1], 'client2': [2, 3], 'client3': [4, 5, 6]}
-
     model_name = 'VGG5'
-    # 从数据集加载数据
     data_list, target_list = prepare_data()
-    # 存储连接的客户端
     clients = {}
-    # 设定最大迭代次数
-    max_iterations = 10
-
+    max_iterations = 3
     cumulative_layer_number = 0
-
-    # 损失列表
-    loss_list = []
-    # 准确率列表
-    acc_list = []
 
     main()

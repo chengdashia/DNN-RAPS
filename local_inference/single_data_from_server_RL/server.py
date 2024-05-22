@@ -8,6 +8,11 @@ from config import B, dataset_path, iterations
 
 
 def get_next_client(current_client):
+    """
+    获取下一个客户端
+    :param current_client:  当前客户端
+    :return:              下一个客户端
+    """
     keys = list(node_layer_indices.keys())
     try:
         current_index = keys.index(current_client)
@@ -21,8 +26,8 @@ def get_next_client(current_client):
 
 def prepare_data():
     """
-    加载数据
-    :return:
+    加载数据集并返回数据和标签
+    :return:  数据集和标签
     """
     data_dir = dataset_path
     test_dataset = datasets.CIFAR10(
@@ -68,6 +73,11 @@ def calculate_accuracy(fx, y):
 
 
 def get_loss_acc(result_list):
+    """
+    计算结果的loss和acc
+    :param result_list:    客户端的推理结果
+    :return:              loss和acc
+    """
     for i in range(iterations):
         loss = F.cross_entropy(result_list[i], target_list[i])
         acc = calculate_accuracy(result_list[i], target_list[i])
@@ -79,6 +89,12 @@ def get_loss_acc(result_list):
 
 
 def handle_client(conn, client_name):
+    """
+    处理客户端的请求
+    :param conn:          客户端的连接
+    :param client_name:  客户端的名称
+    :return:              None
+    """
     for iteration in range(1, max_iterations + 1):
         print(f"======================  Start processing round {iteration} ================================")
         message = receive_data(conn)
@@ -109,6 +125,11 @@ def handle_client(conn, client_name):
 
 
 def accept_connections(server_socket):
+    """
+    接受并处理客户端的连接
+    :param server_socket:  服务器套接字
+    :return:              None
+    """
     # 等待所有的客户端连接
     while len(clients) < len(node_layer_indices):
         conn, addr = server_socket.accept()

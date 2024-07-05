@@ -333,3 +333,40 @@ def str2bool(v):
     else:
         # 否则抛出异常
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def get_total_size(obj, seen=None):
+    """
+    递归计算对象及其引用对象的总内存大小
+    :param obj:
+    :param seen:
+    :return:
+    """
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_total_size(v, seen) for v in obj.values()])
+        size += sum([get_total_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_total_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_total_size(i, seen) for i in obj])
+    return size
+
+
+def calculate_bandwidth_kbps(bytes_received, transmission_time):
+    """
+    根据接收的字节数和传输时间计算带宽（kb/s）
+    :param bytes_received: 接收的字节数
+    :param transmission_time: 传输时间（秒）
+    :return: 带宽（kb/s）
+    """
+    bits_received = bytes_received * 8  # 将字节转换为位
+    bandwidth_bps = bits_received / transmission_time  # 计算带宽（位/秒）
+    bandwidth_kbps = bandwidth_bps / 1000  # 将带宽转换为千位/秒
+    return bandwidth_kbps

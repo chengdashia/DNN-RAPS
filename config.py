@@ -51,7 +51,7 @@ server_list = [
         }
     },
     {
-        "ip": "192.168.215.133",
+        "ip": "192.168.215.128",
         "username": "root",
         "password": "123456",
         "hostname": "client2",
@@ -113,6 +113,8 @@ rl_gamma = 0.9             # discount factor
 rl_b = 100				   # Batch size
 rl_lr = 0.0003             # parameters for Adam optimizer
 rl_betas = (0.9, 0.999)
+
+node_layer_indices = {'client1': [0, 1], 'client2': [2, 3], 'client3': [4, 5, 6]}
 
 # infer times for each device
 iteration = {server['ip']: 5 for server in server_list}

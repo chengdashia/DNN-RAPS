@@ -151,34 +151,6 @@ class Env(Correspondence):
         # 返回状态
         return np.array(state)
 
-    def group(self, baseline, network):
-        """
-        执行客户端分组，使用 KMeans 算法根据客户端的基线时间和网络状态进行聚类。
-        :param baseline:
-        :param network:
-        :return:
-        """
-        from sklearn.cluster import KMeans
-        X = []  # 初始化特征列表
-        for c in self.clients_list:  # 遍历每个客户端
-            X.append([baseline[c]])  # 添加基线时间到特征列表
-
-        # 聚类，不考虑网络限制
-        kmeans = KMeans(n_clusters=config.G, random_state=0).fit(X)  # 进行KMeans聚类
-        cluster_centers = kmeans.cluster_centers_  # 获取聚类中心
-        labels = kmeans.predict(X)  # 预测分组标签
-
-        '''
-        # Clustering with network limitation
-        kmeans = KMeans(n_clusters=config.G - 1, random_state=0).fit(X)
-        cluster_centers = kmeans.cluster_centers_
-        labels = kmeans.predict(X)
-
-        # We manually set Pi3_2 as seperated group for limited bandwidth
-        labels[-1] = 2
-        '''
-        # 返回聚类模型、聚类中心和分组标签
-        return kmeans, cluster_centers, labels
 
     def step(self, action, done):
         """

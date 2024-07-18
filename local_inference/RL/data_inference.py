@@ -2,18 +2,56 @@ import torch
 from torch import nn
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
-import socket
-import time
-import config
-from network_utils import send_data, receive_data
-from utils import get_client_app_port_by_name
+from config import iterations
 import logging
+import torch.nn.functional as F
+
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def get_model(layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number):
+def calculate_accuracy(fx, y):
+    """
+    计算模型输出与真实标签之间的准确率
+
+    参数:
+    fx (Tensor): 模型输出
+    y (Tensor): 真实标签
+
+    返回值:
+    acc (float): 准确率(0-100)
+    """
+    # 计算预测值，fx是模型输出，y是真实标签
+    predictions = fx.max(1, keepdim=True)[1]
+    # 将预测值和真实标签转换为相同形状
+    correct = predictions.eq(y.view_as(predictions)).sum()
+    # 计算准确率，correct是预测正确的样本数量
+    acc = 100.00 * correct.float() / predictions.shape[0]
+    return acc
+
+
+def get_loss_acc(result_list, target):
+    """
+    计算结果的loss和acc
+    :param result_list:    客户端的推理结果
+    :param target:         真实标签
+    :return:              loss和acc
+    """
+    loss_list, acc_list = [], []
+    for i in range(iterations):
+        loss = F.cross_entropy(result_list[i], target[i]).item()
+        acc = calculate_accuracy(result_list[i], target[i])
+        loss_list.append(loss)
+        acc_list.append(acc)
+    avg_loss = sum(loss_list) / len(loss_list)
+    avg_acc = sum(acc_list) / len(acc_list)
+    logging.info(f"Average Loss: {avg_loss:.4f}")
+    logging.info(f"Average Accuracy: {avg_acc:.4f}%")
+    return avg_loss, avg_acc
+
+
+def get_model(model, layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number):
     """
      获取当前节点需要计算的模型层
 
@@ -52,7 +90,7 @@ def get_model(layer_type, in_channels, out_channels, kernel_size, cumulative_lay
     return nn.Sequential(*feature_seq), nn.Sequential(*dense_seq), cumulative_layer_number
 
 
-def calculate_output(node_layer_indices, data, cumulative_layer_number):
+def calculate_output(model, model_name, layer_indices, data, cumulative_layer_number):
     """
     计算当前节点的输出
 
@@ -66,8 +104,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
     cumulative_layer_number: 累计层数
     """
     # 遍历当前主机节点上的层
-    print(f"当前节点的层索引: {node_layer_indices[client_name]}")
-    for index in node_layer_indices[client_name]:
+    for index in layer_indices:
         # 如果节点上的层不相邻，需要实现层之间的兼容性
         layer_type = model_cfg[model_name][index][0]  # 层的类型
         in_channels = model_cfg[model_name][index][1]  # 输入通道数
@@ -76,7 +113,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
 
         # 获取模型的当前层
         features, dense, cumulative_layer_number = get_model(
-            layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number
+            model, layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number
         )
 
         # 选择特征层还是全连接层
@@ -91,7 +128,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
     return data, cumulative_layer_number
 
 
-def node_inference(node_indices, data_list, cumulative_layer_number):
+def node_inference(model, model_name, node_indices, data_list, cumulative_layer_number):
     """
     开始当前节点的推理
 
@@ -108,64 +145,40 @@ def node_inference(node_indices, data_list, cumulative_layer_number):
     # 迭代处理每一批数据
     result_list = []
     start_layer = cumulative_layer_number
-    for i in range(config.iterations):
+    print("start_layer:", start_layer)
+    for i in range(iterations):
         data = data_list[i]
         # 获取推理后的结果
-        result, cumulative_layer_number = calculate_output(node_indices, data, start_layer)
+        result, cumulative_layer_number = calculate_output(model, model_name, node_indices, data, start_layer)
         result_list.append(result)
-    print(f"推理完成，累计层数: {cumulative_layer_number}")
+
     return result_list, cumulative_layer_number
 
 
-def client(name, client_port=None):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # 如果指定了客户端端口，则绑定到该端口
-    if client_port:
-        try:
-            client_socket.bind(('', client_port))  # 绑定客户端的端口
-            logging.info(f"绑定到本地端口 {client_port}")
-        except socket.error as e:
-            logging.error(f"绑定到端口 {client_port} 失败: {e}")
-            return
+def data_inference(data_list, node_indices, cumulative_layer_number):
+    """
+    开始数据推理
 
-    # 连接到服务器
-    try:
-        client_socket.connect(('localhost', 9000))
-        logging.info(f"作为 {name} 连接到服务器")
-    except socket.error as e:
-        logging.error(f"连接到服务器失败: {e}")
-        return
-
-    send_data(client_socket, name)
-
-    while True:
-        data = receive_data(client_socket)
-        if data:
-            node_indices, data_list, cumulative_layer_number = data
-            logging.info(f"{name} 收到数据: {node_indices}, {data_list}")
-            start_time = time.time()
-            processed_data_list, processed_cumulative_layer_number = node_inference(node_indices,
-                                                                                    data_list,
-                                                                                    cumulative_layer_number)
-            end_time = time.time()
-            process_time = end_time - start_time  # 修改计算时间的顺序
-            response = [process_time, processed_data_list, processed_cumulative_layer_number]
-            send_data(client_socket, response)
-        else:
-            break  # 如果没有数据，可能连接已关闭
-
-    client_socket.close()
+    参数:
+    data_list (list): 数据列表
+    node_indices (list): 节点层索引列表
+    cumulative_layer_number (int): 累计层数
 
 
-if __name__ == "__main__":
-    client_name = 'client3'
+    返回值:
+    list: 推理结果列表
+    int: 累计层数
+    """
+
     model_name = 'VGG5'
-    host_ip, host_port = get_client_app_port_by_name(client_name, model_name)
-
     # 初始化模型并载入预训练权重
     model = VGG5("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg)
     model.eval()
     model.load_state_dict(torch.load("../../models/vgg5/vgg5.pth"))
 
-    # 调用客户端函数，并指定客户端端口号
-    client(client_name, client_port=host_port)
+    # 开始推理
+    result_list, cumulative_layer_number = node_inference(model, model_name, node_indices, data_list,
+                                                          cumulative_layer_number)
+
+    return result_list, cumulative_layer_number
+

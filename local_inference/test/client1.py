@@ -5,9 +5,11 @@ import socket
 import time
 from network_utils import send_data, receive_data
 
-def process_data(data, target):
+
+def process_data(data):
     time.sleep(random.uniform(0.1, 0.5))
-    return data, target
+    return data
+
 
 def client(name, client_port=None):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -32,13 +34,16 @@ def client(name, client_port=None):
     while True:
         data = receive_data(client_socket)
         if data:
-            data_list, target_list = data
-            print(f"{name} Received at :  {data_list}, {target_list}")
+            layer_indices, data = data
+            print(f"{name} Received at : {layer_indices} ,{data}")
+
+            # 执行时间
             start_time = time.time()
-            processed_data_list, processed_target_list = process_data(data_list, target_list)
+            processed_data = process_data(data)
             end_time = time.time()
             process_time = end_time - start_time
-            response = [process_time, processed_data_list, processed_target_list]
+            # 拼接数据
+            response = [process_time, processed_data]
             print(f"{name} Sending response: {response}")
             send_data(client_socket, response)
         else:
@@ -46,6 +51,7 @@ def client(name, client_port=None):
             break
 
     client_socket.close()
+
 
 if __name__ == "__main__":
     client_name = 'client1'

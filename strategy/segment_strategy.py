@@ -78,3 +78,22 @@ class NetworkSegmentationStrategy:
 
         return segmentation_points, node_layer_indices
 
+    def random_segmentation_point(self):
+        """
+        随机选择一个分割点
+        :return: 元组,包含一个分割点和节点层索引列表
+        """
+        total_layers = len(self.model_cfg[self.model_name])  # 获取模型总层数
+        eligible_layers = list(range(1, total_layers - 1))  # 获取可用于分割的层索引列表
+
+        # 随机选择一个分割点
+        segmentation_point = random.choice(eligible_layers)
+
+        # 根据分割点生成层索引列表
+        node_layer_indices = [
+            list(range(0, segmentation_point)),  # 前半部分
+            list(range(segmentation_point, total_layers))  # 后半部分
+        ]
+
+        return segmentation_point, node_layer_indices
+

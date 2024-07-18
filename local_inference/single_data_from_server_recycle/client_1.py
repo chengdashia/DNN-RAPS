@@ -67,6 +67,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
     cumulative_layer_number: 累计层数
     """
     # 遍历当前主机节点上的层
+    print(f"当前节点的层索引: {node_layer_indices[client_name]}")
     for index in node_layer_indices[client_name]:
         # 如果节点上的层不相邻，需要实现层之间的兼容性
         layer_type = model_cfg[model_name][index][0]  # 层的类型
@@ -113,7 +114,7 @@ def node_inference(node_indices, data_list, cumulative_layer_number):
         # 获取推理后的结果
         result, cumulative_layer_number = calculate_output(node_indices, data, start_layer)
         result_list.append(result)
-
+    print(f"推理完成，累计层数: {cumulative_layer_number}")
     return result_list, cumulative_layer_number
 
 

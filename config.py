@@ -41,7 +41,7 @@ local_server_list = [
 # 线上部署
 server_list = [
     {
-        "ip": "192.168.215.132",
+        "ip": "192.168.215.133",
         "username": "root",
         "password": "123456",
         "hostname": "client1",
@@ -65,6 +65,16 @@ server_list = [
         "username": "root",
         "password": "123456",
         "hostname": "client3",
+        "application": {
+            "VGG5": 9001,
+            "VGG6": 9002
+        }
+    },
+    {
+        "ip": "192.168.215.137",
+        "username": "root",
+        "password": "123456",
+        "hostname": "client4",
         "application": {
             "VGG5": 9001,
             "VGG6": 9002

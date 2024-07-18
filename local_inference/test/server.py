@@ -10,33 +10,32 @@ node_layer_indices = {
 
 initial_data = [1, 2, 3, 4, 5, 6, 7]
 clients = {}
-task_results = {}
+task_results = {task: [] for task in node_layer_indices}
 client_status = {client: True for client in set(client for task in node_layer_indices.values() for client in task)}
-task_status = {task: False for task in node_layer_indices}
 lock = threading.Lock()
 condition = threading.Condition(lock)
 
 
-def handle_client(conn, client_name, task_name, data_indices, target_indices):
-    data_to_send = (data_indices, target_indices)
+def handle_client(conn, client_name, task_name, layer_indices, data):
+    data_to_send = (layer_indices, data)
     send_data(conn, data_to_send)
     message = receive_data(conn)
     if not message:
-        return None, None, None
+        return None, None
 
-    process_time, processed_data, processed_target = message
+    process_time, processed_data = message
     print(f"{client_name} completed part of {task_name} in {process_time} seconds")
 
-    return processed_data, processed_target, process_time
+    return processed_data, process_time
 
 
-def process_task(task_name, client_name, data_indices, target_indices):
-    processed_data, processed_target, _ = handle_client(clients[client_name], client_name, task_name, data_indices,
-                                                        target_indices)
+def process_task(task_name, client_name, layer_indices, data):
+    processed_data, process_time = handle_client(clients[client_name], client_name, task_name, layer_indices, data)
 
     if processed_data is not None:
         with lock:
-            task_results.setdefault(task_name, []).append((processed_data, processed_target))
+            task_results[task_name].append(processed_data)
+            print(task_results)
             client_status[client_name] = True
             condition.notify_all()
     else:
@@ -45,29 +44,34 @@ def process_task(task_name, client_name, data_indices, target_indices):
 
 
 def manage_tasks():
+    # Send the initial data to the first client of each task
     for task_name, clients_indices in node_layer_indices.items():
         first_client = list(clients_indices.keys())[0]
-        data_indices = clients_indices[first_client]
-        target_indices = data_indices
+        layer_indices = clients_indices[first_client]
+        data = initial_data
 
         with lock:
             client_status[first_client] = False
 
-        threading.Thread(target=process_task, args=(task_name, first_client, data_indices, target_indices)).start()
+        threading.Thread(target=process_task, args=(task_name, first_client, layer_indices, data)).start()
 
     while True:
         with lock:
             all_tasks_done = True
             for task_name, clients_indices in node_layer_indices.items():
-                if task_name not in task_results or len(task_results[task_name]) < 2:
+                if len(task_results[task_name]) < len(clients_indices):
                     all_tasks_done = False
-                    second_client = list(clients_indices.keys())[1]
-                    if client_status[second_client]:
-                        data_indices = clients_indices[second_client]
-                        target_indices = data_indices
-                        client_status[second_client] = False
+
+                    # Find the next client in the sequence for the task
+                    completed_clients = len(task_results[task_name])
+                    next_client = list(clients_indices.keys())[completed_clients]
+
+                    if client_status[next_client]:
+                        layer_indices = clients_indices[next_client]
+                        data = task_results[task_name][-1] if task_results[task_name] else initial_data
+                        client_status[next_client] = False
                         threading.Thread(target=process_task,
-                                         args=(task_name, second_client, data_indices, target_indices)).start()
+                                         args=(task_name, next_client, layer_indices, data)).start()
 
             if all_tasks_done:
                 break

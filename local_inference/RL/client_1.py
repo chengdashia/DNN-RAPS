@@ -1,7 +1,10 @@
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 from models.model_struct import model_cfg
 from models.vgg5.vgg5 import VGG5
+from config import B, dataset_path
 import socket
 import time
 import config
@@ -9,8 +12,37 @@ from network_utils import send_data, receive_data
 from utils import get_client_app_port_by_name
 import logging
 
+
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def prepare_data():
+    """
+    加载数据集并返回数据和标签
+    :return:  数据集和标签
+    """
+    data_dir = dataset_path
+    test_dataset = datasets.CIFAR10(
+        data_dir,
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        ),
+        download=True
+    )
+
+    test_loader = DataLoader(
+        test_dataset, batch_size=B, shuffle=False, num_workers=0
+    )
+    data_cpu_list, target_cpu_list = [], []
+    for data, target in test_loader:
+        data_cpu_list.append(data)
+        target_cpu_list.append(target)
+    return data_cpu_list, target_cpu_list
 
 
 def get_model(layer_type, in_channels, out_channels, kernel_size, cumulative_layer_number):
@@ -52,7 +84,7 @@ def get_model(layer_type, in_channels, out_channels, kernel_size, cumulative_lay
     return nn.Sequential(*feature_seq), nn.Sequential(*dense_seq), cumulative_layer_number
 
 
-def calculate_output(node_layer_indices, data, cumulative_layer_number):
+def calculate_output(node_indices, data, cumulative_layer_number):
     """
     计算当前节点的输出
 
@@ -66,8 +98,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
     cumulative_layer_number: 累计层数
     """
     # 遍历当前主机节点上的层
-    print(f"当前节点的层索引: {node_layer_indices[client_name]}")
-    for index in node_layer_indices[client_name]:
+    for index in node_indices:
         # 如果节点上的层不相邻，需要实现层之间的兼容性
         layer_type = model_cfg[model_name][index][0]  # 层的类型
         in_channels = model_cfg[model_name][index][1]  # 输入通道数
@@ -91,7 +122,7 @@ def calculate_output(node_layer_indices, data, cumulative_layer_number):
     return data, cumulative_layer_number
 
 
-def node_inference(node_indices, data_list, cumulative_layer_number):
+def node_inference(node_indices, cumulative_layer_number):
     """
     开始当前节点的推理
 
@@ -108,13 +139,16 @@ def node_inference(node_indices, data_list, cumulative_layer_number):
     # 迭代处理每一批数据
     result_list = []
     start_layer = cumulative_layer_number
+
+    data_list, target_list = prepare_data()
+
     for i in range(config.iterations):
         data = data_list[i]
         # 获取推理后的结果
         result, cumulative_layer_number = calculate_output(node_indices, data, start_layer)
         result_list.append(result)
-    print(f"推理完成，累计层数: {cumulative_layer_number}")
-    return result_list, cumulative_layer_number
+
+    return target_list, result_list, cumulative_layer_number
 
 
 def client(name, client_port=None):
@@ -130,7 +164,7 @@ def client(name, client_port=None):
 
     # 连接到服务器
     try:
-        client_socket.connect(('localhost', 9000))
+        client_socket.connect(('192.168.31.223', 9000))
         logging.info(f"作为 {name} 连接到服务器")
     except socket.error as e:
         logging.error(f"连接到服务器失败: {e}")
@@ -141,15 +175,16 @@ def client(name, client_port=None):
     while True:
         data = receive_data(client_socket)
         if data:
-            node_indices, data_list, cumulative_layer_number = data
-            logging.info(f"{name} 收到数据: {node_indices}, {data_list}")
+            node_indices, cumulative_layer_number = data
+            logging.info(f"{name} 收到数据: {node_indices}")
             start_time = time.time()
-            processed_data_list, processed_cumulative_layer_number = node_inference(node_indices,
-                                                                                    data_list,
-                                                                                    cumulative_layer_number)
+            target_list, processed_data_list, processed_cumulative_layer_number = node_inference(
+                node_indices, cumulative_layer_number
+            )
+
             end_time = time.time()
             process_time = end_time - start_time  # 修改计算时间的顺序
-            response = [process_time, processed_data_list, processed_cumulative_layer_number]
+            response = [target_list, process_time, processed_data_list, processed_cumulative_layer_number]
             send_data(client_socket, response)
         else:
             break  # 如果没有数据，可能连接已关闭
@@ -158,7 +193,7 @@ def client(name, client_port=None):
 
 
 if __name__ == "__main__":
-    client_name = 'client3'
+    client_name = 'client1'
     model_name = 'VGG5'
     host_ip, host_port = get_client_app_port_by_name(client_name, model_name)
 

@@ -230,6 +230,6 @@ if __name__ == "__main__":
     client_transmit_bandwidths = {}
     # 用于记录每轮的总执行时间
     round_times = []
-    max_iterations = 100
+    max_iterations = 1
     cumulative_layer_number = 0
     main()

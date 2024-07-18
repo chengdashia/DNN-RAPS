@@ -172,7 +172,7 @@ def data_inference(data_list, node_indices, cumulative_layer_number):
 
     model_name = 'VGG5'
     # 初始化模型并载入预训练权重
-    model = VGG5("Client", model_name, len(model_cfg[model_name]) - 1, model_cfg)
+    model = VGG5("Server", model_name, len(model_cfg[model_name]) - 1, model_cfg)
     model.eval()
     model.load_state_dict(torch.load("../../models/vgg5/vgg5.pth"))
 

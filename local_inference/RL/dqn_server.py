@@ -122,10 +122,9 @@ def handle_client(conn, client_name):
         segment_point, layer_indices = strategy.random_segmentation_point()
         client_layer_indices = layer_indices[0]
         remain_layer_indices = layer_indices[1]
-        processed_cumulative_layer_number = cumulative_layer_number
         next_client_conn = clients[next_client_name]
         # 序列化数据后发送
-        data_to_send = [client_layer_indices, processed_cumulative_layer_number]
+        data_to_send = [client_layer_indices, cumulative_layer_number]
         send_data(next_client_conn, data_to_send)
 
 

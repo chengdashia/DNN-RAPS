@@ -43,7 +43,7 @@ class VGG5(nn.Module):
         denses = []  # 密集层列表
         # 根据网络位置选择配置
         if self.location == 'Server':
-            cfg = cfg[self.split_layer + 1:]  # 服务器部分的配置（分割层之后）
+            cfg = cfg[:self.split_layer + 1]  # 服务器部分的配置（分割层之后）
         if self.location == 'Client':
             cfg = cfg[:self.split_layer + 1]  # 客户端部分的配置（分割层之前）
         if self.location == 'Unit':

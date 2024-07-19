@@ -9,8 +9,9 @@ import logging
 from data_inference import data_inference, get_loss_acc
 from strategy.segment_strategy import NetworkSegmentationStrategy
 from models.model_struct import model_cfg
-from dqn import DQNAgent
+from optimize_dqn import DQNAgent
 from resource_utilization import get_windows_resource_info
+logging.getLogger('matplotlib').propagate = False
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -172,6 +173,6 @@ if __name__ == "__main__":
     client_transmit_times = {}
     client_transmit_bandwidths = {}
     round_times = []
-    max_iterations = 360
+    max_iterations = 30
     cumulative_layer_number = 0
     main()

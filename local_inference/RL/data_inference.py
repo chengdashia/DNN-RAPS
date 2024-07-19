@@ -145,7 +145,6 @@ def node_inference(model, model_name, node_indices, data_list, cumulative_layer_
     # 迭代处理每一批数据
     result_list = []
     start_layer = cumulative_layer_number
-    print("start_layer:", start_layer)
     for i in range(iterations):
         data = data_list[i]
         # 获取推理后的结果

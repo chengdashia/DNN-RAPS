@@ -3,6 +3,7 @@ from optimize_dqn import DQNAgent  # 确保正确导入 DQNAgent 类
 from models.model_struct import model_cfg
 from resource_utilization import get_windows_resource_info
 
+
 # 定义加载模型的函数
 def load_model(model_path, state_size, action_size):
     agent = DQNAgent(state_size, action_size)
@@ -10,12 +11,14 @@ def load_model(model_path, state_size, action_size):
     agent.model.eval()
     return agent
 
+
 # 定义根据资源状态进行推理的函数
 def get_segmentation_point(agent, state):
     state = torch.FloatTensor(state).unsqueeze(0)
     with torch.no_grad():
         action_values = agent.model(state)
     return torch.argmax(action_values[0]).item()
+
 
 # 定义获取当前资源状态的函数
 def get_current_state():
@@ -28,6 +31,7 @@ def get_current_state():
     ]
     print(state)
     return state
+
 
 if __name__ == "__main__":
     model_path = "dqn_model2.pth"  # 模型参数文件路径

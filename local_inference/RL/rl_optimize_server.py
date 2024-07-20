@@ -7,7 +7,6 @@ from network_utils import send_data, receive_data
 from utils import get_total_size
 import logging
 from data_inference import data_inference, get_loss_acc
-from strategy.segment_strategy import NetworkSegmentationStrategy
 from models.model_struct import model_cfg
 from optimize_dqn import DQNAgent
 from resource_utilization import get_windows_resource_info
@@ -79,7 +78,8 @@ def handle_client(conn, client_name):
         send_data(conn, data_to_send)
 
         # 接收客户端的数据
-        target_list, data_inference_list, processed_cumulative_layer_number, transmit_time, inference_time = get_client_time_and_data(conn, client_name)
+        target_list, data_inference_list, processed_cumulative_layer_number, transmit_time, inference_time = \
+            get_client_time_and_data(conn, client_name)
 
         if target_list is None:
             break
@@ -161,12 +161,6 @@ if __name__ == "__main__":
     action_size = len(model_cfg[model_name])
     agent = DQNAgent(state_size, action_size)
     batch_size = 3
-
-    strategy = NetworkSegmentationStrategy(model_name, model_cfg)
-    segment_point, layer_indices = strategy.random_segmentation_point()
-
-    client_layer_indices = layer_indices[0]
-    remain_layer_indices = layer_indices[1]
 
     clients = {}
     client_inference_times = {}
